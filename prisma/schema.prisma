@@ -43,13 +43,16 @@ enum FocusState {
 // MODELS
 // ----------------------------------------------------
 
+// ----------------------------------------------------
+// MODELS
+// ----------------------------------------------------
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
   password  String   // Hashed
   createdAt DateTime @default(now())
 
-  // Relations
   nodes     GoalNode[]
   dailyLogs DailyLog[]
 }
@@ -58,25 +61,28 @@ model GoalNode {
   id              String   @id @default(cuid())
   userId          String
   title           String
-  reason          String   // Immutable core reason
-  deadline        DateTime // Immutable deadline
+  reason          String   
+  deadline        DateTime 
   
-  // The Hierarchy (Adjacency List)
   parentId        String?
   parent          GoalNode?  @relation("NodeHierarchy", fields: [parentId], references: [id])
   children        GoalNode[] @relation("NodeHierarchy")
 
-  // The Jurisdiction (Temporal Tracking)
   status          Status     @default(ACTIVE)
   activatedAt     DateTime   @default(now())
-  deactivatedAt   DateTime?  // Stamped when paused/stopped/completed
+  deactivatedAt   DateTime?  
 
-  // Execution Limits & Metrics (Required for bottom-level Tasks)
+  // --- UPGRADED TASK VARIABLES ---
+  isTask          Boolean    @default(false) // Explicitly defines if it's a Goal or Task
   effortType      EffortType @default(NOT_APPLICABLE)
-  targetQuantity  Float?     // e.g., 50 (problems, hours, etc.)
+  
+  quantifierUnit  String?    // e.g., "LeetCode Problems", "Pages", "Commits"
+  targetQuantity  Float?     // The number they are trying to hit
   currentQuantity Float      @default(0)
+  
+  estimatedTime   Float?     // Estimated total hours to complete this task
+  // -------------------------------
 
-  // Relations
   user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   dailyLogs       DailyLog[]
 
@@ -88,23 +94,24 @@ model DailyLog {
   id              String     @id @default(cuid())
   userId          String
   
-  // The Time Block
-  date            DateTime   // e.g., 2026-04-19 (Stripped of time)
-  hourBlock       Int        // 0 to 23 (Represents the 1-hour slot)
+  date            DateTime   
+  hourBlock       Int        // 0 to 23 
   
-  // What happened?
-  blockType       BlockType  // SLEEP, COLLEGE, or TASK_EXECUTION
+  blockType       BlockType  
   focusState      FocusState @default(N_A)
   
-  // The Action (If blockType is TASK_EXECUTION)
-  taskId          String?    // Points to the specific GoalNode
-  valueAchieved   Float?     // How much quantity was added to the task
-  
-  // Relations
+  // --- UPGRADED LOG VARIABLES ---
+  taskId          String?    
+  valueAchieved   Float?     // Quantity achieved (e.g., 3 problems)
+  timeSpent       Float?     // Time spent in HOURS (e.g., 0.5 = 30 mins)
+  notes           String?    @db.Text // The verbal descriptor / mini-journal
+  // ------------------------------
+
   user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   task            GoalNode?  @relation(fields: [taskId], references: [id])
 
-  // Constraints: A user can only have one log per hour block per day
-  @@unique([userId, date, hourBlock])
+  // REMOVED: @@unique([userId, date, hourBlock]) 
+  // We removed the unique constraint so you can log multiple tasks in the same hour block!
+  
   @@index([userId, date])
 }

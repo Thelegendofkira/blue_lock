@@ -10,11 +10,23 @@ export default async function DailyPage() {
   const dateStr = new Date().toISOString().split("T")[0];
   const today = new Date(dateStr);
 
-  // 2. Fetch today's logged blocks to populate the grid
+  // 2. Fetch today's logged blocks to populate the grid (include related task for display)
   const todaysLogs = await prisma.dailyLog.findMany({
     where: {
       userId: DUMMY_USER_ID,
       date: today,
+    },
+    include: {
+      task: {
+        select: {
+          id: true,
+          title: true,
+          effortType: true,
+          quantifierUnit: true,
+          targetQuantity: true,
+          currentQuantity: true,
+        },
+      },
     },
   });
 
@@ -22,16 +34,17 @@ export default async function DailyPage() {
   const activeTasks = await prisma.goalNode.findMany({
     where: {
       userId: DUMMY_USER_ID,
+      isTask: true,
       status: "ACTIVE",
-      effortType: {
-        not: "NOT_APPLICABLE", // Don't fetch top-level goals, only actionable tasks
-      },
     },
     select: {
       id: true,
       title: true,
       effortType: true,
-    }
+      quantifierUnit: true,
+      targetQuantity: true,
+      currentQuantity: true,
+    },
   });
 
   return <DailyGrid userId={DUMMY_USER_ID} activeTasks={activeTasks} todaysLogs={todaysLogs} />;

@@ -120,9 +120,9 @@ const engines = [
 ];
 
 const appNavLinks = [
-  { href: "/daily",   label: "Daily" },
-  { href: "/goals",   label: "Goals" },
-  { href: "/weekly",  label: "Weekly" },
+  { href: "/daily", label: "Daily" },
+  { href: "/goals", label: "Goals" },
+  { href: "/weekly", label: "Weekly" },
   { href: "/monthly", label: "Monthly" },
 ];
 
@@ -203,7 +203,7 @@ export default function HomePage() {
         <blockquote className="relative mb-8 max-w-2xl">
           <span className="absolute -left-4 -top-4 text-7xl leading-none text-blue-600/20 font-serif select-none">&ldquo;</span>
           <p className="relative text-xl font-semibold italic leading-relaxed text-blue-200 md:text-2xl">
-            The selfish one who devours all others will become the best striker in the world.
+            It is now or never life does not give second chances
           </p>
           <footer className="mt-3 text-sm font-medium tracking-widest text-blue-500 uppercase">
             — Ego Jinpachi, Blue Lock
@@ -258,121 +258,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── FEATURES OVERVIEW ──────────────────────────────────── */}
-      <section id="features" className="px-6 py-24">
-        <div className="mx-auto max-w-6xl">
-          <div className="mb-16 text-center">
-            <span className="mb-3 inline-block text-xs font-bold uppercase tracking-[0.3em] text-blue-500">
-              System Architecture
-            </span>
-            <h2 className="text-3xl font-black text-white md:text-4xl">
-              Five Engines. Zero Compromises.
-            </h2>
-            <p className="mx-auto mt-4 max-w-xl text-zinc-400">
-              Every feature is designed to eliminate the gap between what you
-              plan and what you actually do.
-            </p>
-          </div>
 
-          {/* Engine cards */}
-          <div className="space-y-6">
-            {engines.map((engine) => (
-              <div
-                key={engine.id}
-                id={engine.id}
-                className="group rounded-2xl border border-zinc-800 bg-zinc-900/60 p-8 transition-colors hover:border-blue-700/60 hover:bg-zinc-900"
-              >
-                {/* Engine header */}
-                <div className="mb-6 flex items-start gap-5">
-                  <span className="flex-shrink-0 rounded-xl border border-blue-700/40 bg-blue-600/10 px-3 py-1 text-xs font-black tracking-widest text-blue-400 uppercase">
-                    {engine.number}
-                  </span>
-                  <div>
-                    <h3 className="text-xl font-black text-white">
-                      {engine.title}
-                    </h3>
-                    <p className="mt-1 text-sm font-medium italic text-blue-400">
-                      {engine.summary}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Feature list */}
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {engine.features.map((f) => (
-                    <div
-                      key={f.label}
-                      className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4"
-                    >
-                      <p className="mb-1 text-sm font-bold text-blue-300">
-                        {f.label}
-                      </p>
-                      <p className="text-sm leading-relaxed text-zinc-400">
-                        {f.detail}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── QUICK NAV CARDS ────────────────────────────────────── */}
-      <section className="px-6 pb-24">
-        <div className="mx-auto max-w-6xl">
-          <div className="mb-12 text-center">
-            <span className="mb-3 inline-block text-xs font-bold uppercase tracking-[0.3em] text-blue-500">
-              Navigate
-            </span>
-            <h2 className="text-2xl font-black text-white md:text-3xl">
-              Jump into your dashboard
-            </h2>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              {
-                href: "/daily",
-                label: "Daily View",
-                desc: "Log your 1-hour blocks and track today's execution.",
-                icon: "📅",
-              },
-              {
-                href: "/goals",
-                label: "Goal Tree",
-                desc: "Manage your full goal hierarchy and active tasks.",
-                icon: "🎯",
-              },
-              {
-                href: "/weekly",
-                label: "Weekly Report",
-                desc: "Review your week's execution and AI analysis.",
-                icon: "📊",
-              },
-              {
-                href: "/monthly",
-                label: "Monthly Overview",
-                desc: "Zoom out and spot long-term patterns.",
-                icon: "🗓️",
-              },
-            ].map((card) => (
-              <Link
-                key={card.href}
-                href={card.href}
-                className="group rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 transition-all hover:border-blue-600/60 hover:bg-zinc-900 hover:-translate-y-0.5"
-              >
-                <span className="mb-3 block text-3xl">{card.icon}</span>
-                <p className="mb-1 font-bold text-white group-hover:text-blue-300 transition-colors">
-                  {card.label}
-                </p>
-                <p className="text-sm text-zinc-500">{card.desc}</p>
-              </Link>
-            ))}
-          </div>
-        </div>
-      </section>
 
       {/* ── FOOTER CTA ─────────────────────────────────────────── */}
       <section className="border-t border-zinc-800 bg-zinc-900/40 px-6 py-20 text-center">
