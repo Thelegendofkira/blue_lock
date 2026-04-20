@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { addGoalNode } from "@/actions/cognitive-engine";
+import { useState, useTransition } from "react";
+import { addGoalNode, toggleNodeStatus } from "@/actions/cognitive-engine";
 import { EffortType, Status } from "@prisma/client";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -34,12 +34,54 @@ function fmtDate(d: string | Date) {
   });
 }
 
-const effortMeta: Record<string, { label: string; pill: string; glow: string }> = {
-  DEEP_WORK:      { label: "Deep Work",     pill: "bg-blue-950/70 text-blue-300 border-blue-700",   glow: "shadow-blue-900/40" },
-  SHALLOW_WORK:   { label: "Shallow Work",  pill: "bg-zinc-800 text-zinc-300 border-zinc-600",       glow: "shadow-zinc-900/20" },
-  NO_EFFORT:      { label: "No Effort",     pill: "bg-zinc-900 text-zinc-400 border-zinc-700",       glow: "" },
-  NOT_APPLICABLE: { label: "Goal",          pill: "bg-indigo-950/50 text-indigo-400 border-indigo-800", glow: "" },
+function fmtHrs(h: number | null | undefined) {
+  if (h == null) return null;
+  return h >= 1 ? `${h}h` : `${Math.round(h * 60)}m`;
+}
+
+const effortPill: Record<string, string> = {
+  DEEP_WORK:     "bg-blue-950/70 text-blue-300 border-blue-700",
+  SHALLOW_WORK:  "bg-zinc-800 text-zinc-300 border-zinc-600",
+  NO_EFFORT:     "bg-zinc-900 text-zinc-400 border-zinc-700",
+  NOT_APPLICABLE:"bg-indigo-950/50 text-indigo-400 border-indigo-800",
 };
+
+// ─── Status Control (Pause / Resume) ──────────────────────────────────────────
+function StatusToggle({ node }: { node: GoalNode }) {
+  const [isPending, startTransition] = useTransition();
+  const isPaused = node.status === "PAUSED";
+
+  const handleToggle = () => {
+    startTransition(async () => {
+      await toggleNodeStatus(node.id, isPaused ? "ACTIVE" : "PAUSED");
+      window.location.reload();
+    });
+  };
+
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); handleToggle(); }}
+      disabled={isPending}
+      title={isPaused ? "Resume" : "Pause"}
+      className={`
+        flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold
+        border transition-all disabled:opacity-40
+        ${isPaused
+          ? "border-green-700 bg-green-950/40 text-green-400 hover:bg-green-900/60"
+          : "border-zinc-700 bg-zinc-900 text-zinc-400 hover:border-yellow-600 hover:text-yellow-400 hover:bg-yellow-950/30"
+        }
+      `}
+    >
+      {isPending ? (
+        <span className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+      ) : isPaused ? (
+        <>▶ Resume</>
+      ) : (
+        <>⏸ Pause</>
+      )}
+    </button>
+  );
+}
 
 // ─── Task Metrics Strip ────────────────────────────────────────────────────────
 function TaskMetrics({ node }: { node: GoalNode }) {
@@ -48,94 +90,114 @@ function TaskMetrics({ node }: { node: GoalNode }) {
       ? Math.min(100, Math.round((node.currentQuantity / node.targetQuantity) * 100))
       : null;
 
+  const barColor =
+    progress == null ? "" :
+    progress >= 100  ? "bg-green-500" :
+    progress >= 60   ? "bg-blue-500"  : "bg-red-500";
+
+  const pctColor =
+    progress == null ? "" :
+    progress >= 100  ? "text-green-400" :
+    progress >= 60   ? "text-blue-400"  : "text-red-400";
+
   return (
-    <div className="mt-2 space-y-2">
-      {/* Metric pills */}
+    <div className="mt-2.5 space-y-2">
       <div className="flex flex-wrap gap-2">
         {node.estimatedTime != null && (
-          <span className="flex items-center gap-1.5 text-xs bg-zinc-900 border border-zinc-700 rounded-full px-3 py-1 text-zinc-300">
-            <svg className="w-3 h-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <span className="inline-flex items-center gap-1.5 text-xs bg-zinc-900 border border-zinc-700 rounded-full px-3 py-1 text-zinc-300">
+            <svg className="w-3 h-3 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <circle cx="12" cy="12" r="10" strokeWidth="2"/>
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6l4 2"/>
             </svg>
-            {node.estimatedTime}h est.
+            {fmtHrs(node.estimatedTime)} est.
           </span>
         )}
         {node.targetQuantity != null && (
-          <span className="flex items-center gap-1.5 text-xs bg-zinc-900 border border-zinc-700 rounded-full px-3 py-1 text-zinc-300">
-            <svg className="w-3 h-3 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
-            </svg>
-            <span className="font-mono font-bold text-white">{node.currentQuantity}</span>
-            <span className="text-zinc-500">/</span>
-            <span className="font-mono">{node.targetQuantity}</span>
-            {node.quantifierUnit && <span className="text-zinc-500 ml-0.5">{node.quantifierUnit}</span>}
+          <span className="inline-flex items-center gap-1 text-xs bg-zinc-900 border border-zinc-700 rounded-full px-3 py-1 text-zinc-300 font-mono">
+            <span className="text-white font-bold">{node.currentQuantity}</span>
+            <span className="text-zinc-600">/</span>
+            <span>{node.targetQuantity}</span>
+            {node.quantifierUnit && (
+              <span className="text-zinc-500 ml-0.5 font-sans">{node.quantifierUnit}</span>
+            )}
           </span>
         )}
       </div>
 
-      {/* Progress bar */}
       {progress !== null && (
         <div className="flex items-center gap-2">
           <div className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
             <div
-              className={`h-full rounded-full transition-all duration-500 ${progress >= 100 ? "bg-green-500" : progress >= 60 ? "bg-blue-500" : "bg-red-500"}`}
+              className={`h-full rounded-full transition-all duration-500 ${barColor}`}
               style={{ width: `${progress}%` }}
             />
           </div>
-          <span className={`text-xs font-bold font-mono w-8 text-right ${progress >= 100 ? "text-green-400" : progress >= 60 ? "text-blue-400" : "text-red-400"}`}>
-            {progress}%
-          </span>
+          <span className={`text-xs font-bold font-mono w-8 text-right ${pctColor}`}>{progress}%</span>
         </div>
       )}
     </div>
   );
 }
 
-// ─── Child Card (recursive) ────────────────────────────────────────────────────
+// ─── Child Card ────────────────────────────────────────────────────────────────
 function ChildCard({ node, allNodes }: { node: GoalNode; allNodes: GoalNode[] }) {
   const [open, setOpen] = useState(false);
   const children = allNodes.filter((n) => n.parentId === node.id);
-  const meta = effortMeta[node.effortType] ?? effortMeta.NOT_APPLICABLE;
-  const isTask = node.isTask;
+  const isPaused = node.status === "PAUSED";
 
   return (
-    <div className={`rounded-xl border overflow-hidden transition-all ${isTask ? "border-zinc-700 bg-zinc-950" : "border-zinc-800 bg-zinc-950/60"}`}>
-      <button
-        onClick={() => setOpen((p) => !p)}
-        className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left group hover:bg-zinc-900/80 transition-colors"
-      >
-        <div className="flex items-center gap-3 min-w-0">
+    <div
+      className={`rounded-xl border overflow-hidden transition-all ${
+        isPaused
+          ? "border-zinc-800/50 bg-zinc-950/30 opacity-50"
+          : node.isTask
+          ? "border-zinc-700 bg-zinc-950"
+          : "border-zinc-800 bg-zinc-950/60"
+      }`}
+    >
+      {/* Header row */}
+      <div className="flex items-center gap-2 px-4 py-3">
+        <button
+          onClick={() => setOpen((p) => !p)}
+          className="flex-1 flex items-center gap-3 min-w-0 text-left group"
+        >
           <span
-            className="text-zinc-600 text-xs transition-transform duration-200 flex-shrink-0"
+            className="text-zinc-600 text-xs flex-shrink-0 transition-transform duration-200"
             style={{ display: "inline-block", transform: open ? "rotate(90deg)" : "rotate(0deg)" }}
           >
             ▶
           </span>
-          {/* Task vs Goal icon dot */}
-          <span className={`flex-shrink-0 w-2 h-2 rounded-full ${isTask ? "bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.6)]" : "bg-indigo-500/50"}`} />
-          <span className="text-sm font-semibold text-zinc-100 truncate">{node.title}</span>
-          <span className={`hidden sm:inline-block flex-shrink-0 text-xs font-medium px-2 py-0.5 rounded border ${meta.pill}`}>
-            {isTask ? meta.label : "Sub-goal"}
+          <span className={`flex-shrink-0 w-2 h-2 rounded-full ${node.isTask ? "bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.5)]" : "bg-indigo-500/40"}`} />
+          <span className={`text-sm font-semibold truncate ${isPaused ? "text-zinc-500 line-through decoration-zinc-700" : "text-zinc-100"}`}>
+            {node.title}
           </span>
-        </div>
-        <div className="flex-shrink-0 text-xs text-zinc-600">{fmtDate(node.deadline)}</div>
-      </button>
+          <span className={`hidden sm:inline-block flex-shrink-0 text-xs font-medium px-2 py-0.5 rounded border ${effortPill[node.effortType]}`}>
+            {node.isTask ? node.effortType.replace("_", " ") : "Sub-goal"}
+          </span>
+          {isPaused && (
+            <span className="flex-shrink-0 text-xs font-bold px-2 py-0.5 rounded border bg-yellow-950/40 text-yellow-500 border-yellow-800">
+              PAUSED
+            </span>
+          )}
+        </button>
 
-      {/* Expanded body for tasks */}
+        {/* Controls: deadline + Pause/Resume */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className="hidden sm:block text-xs text-zinc-700">{fmtDate(node.deadline)}</span>
+          <StatusToggle node={node} />
+        </div>
+      </div>
+
+      {/* Expanded body */}
       {open && (
         <div className="border-t border-zinc-800/60 px-4 py-3">
-          {isTask && <TaskMetrics node={node} />}
-
+          {node.isTask && <TaskMetrics node={node} />}
           {children.length > 0 && (
             <div className="mt-3 space-y-2">
-              {children.map((c) => (
-                <ChildCard key={c.id} node={c} allNodes={allNodes} />
-              ))}
+              {children.map((c) => <ChildCard key={c.id} node={c} allNodes={allNodes} />)}
             </div>
           )}
-
-          {!isTask && children.length === 0 && (
+          {!node.isTask && children.length === 0 && (
             <p className="text-xs italic text-zinc-600">No sub-items yet.</p>
           )}
         </div>
@@ -149,48 +211,68 @@ function GoalCard({ goal, allNodes }: { goal: GoalNode; allNodes: GoalNode[] }) 
   const [open, setOpen] = useState(false);
   const children = allNodes.filter((n) => n.parentId === goal.id);
   const deadlinePast = new Date(goal.deadline) < new Date();
+  const isPaused = goal.status === "PAUSED";
   const taskCount = allNodes.filter((n) => n.parentId === goal.id && n.isTask).length;
 
   return (
-    <div className={`rounded-2xl border bg-zinc-900 shadow-lg transition-all ${open ? "border-blue-700/50 shadow-blue-950/30" : "border-zinc-800 hover:border-zinc-700"}`}>
-      <button
-        onClick={() => setOpen((p) => !p)}
-        className="w-full text-left px-6 py-5 flex items-start justify-between gap-4 group"
-      >
-        <div className="flex-1 min-w-0">
+    <div
+      className={`rounded-2xl border bg-zinc-900 shadow-lg transition-all ${
+        isPaused
+          ? "border-zinc-800/50 opacity-60"
+          : open
+          ? "border-blue-700/50 shadow-blue-950/20"
+          : "border-zinc-800 hover:border-zinc-700"
+      }`}
+    >
+      {/* Card header */}
+      <div className="px-6 py-5 flex items-start gap-4">
+        {/* Clickable title area */}
+        <button
+          onClick={() => setOpen((p) => !p)}
+          className="flex-1 text-left min-w-0 group"
+        >
           <div className="flex items-center gap-3 mb-1 flex-wrap">
-            <h3 className="text-lg font-black text-white group-hover:text-blue-300 transition-colors truncate">
+            <h3 className={`text-lg font-black transition-colors truncate ${isPaused ? "text-zinc-500 line-through decoration-zinc-600" : "text-white group-hover:text-blue-300"}`}>
               {goal.title}
             </h3>
             <span
               className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${
-                deadlinePast
+                isPaused
+                  ? "bg-yellow-950/40 text-yellow-500 border-yellow-800"
+                  : deadlinePast
                   ? "bg-red-950/50 text-red-400 border-red-800"
                   : "bg-blue-950/50 text-blue-400 border-blue-800"
               }`}
             >
-              {deadlinePast ? "⚠ Overdue" : `Due ${fmtDate(goal.deadline)}`}
+              {isPaused ? "⏸ Paused" : deadlinePast ? "⚠ Overdue" : `Due ${fmtDate(goal.deadline)}`}
             </span>
           </div>
           <p className="text-sm text-zinc-500 italic line-clamp-1">{goal.reason}</p>
-          <div className="flex items-center gap-3 mt-2 text-xs text-zinc-600">
+          <div className="flex items-center gap-3 mt-1.5 text-xs text-zinc-600">
             <span>{children.length} item{children.length !== 1 ? "s" : ""}</span>
             {taskCount > 0 && (
               <span className="flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-red-500/70 inline-block" />
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500/60" />
                 {taskCount} task{taskCount !== 1 ? "s" : ""}
               </span>
             )}
           </div>
-        </div>
-        <span
-          className="text-zinc-500 transition-transform duration-200 text-sm mt-1 flex-shrink-0"
-          style={{ display: "inline-block", transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
-        >
-          ▼
-        </span>
-      </button>
+        </button>
 
+        {/* Right controls */}
+        <div className="flex flex-col items-end gap-2 flex-shrink-0 mt-0.5">
+          <StatusToggle node={goal} />
+          <span
+            className="text-zinc-500 text-sm cursor-pointer select-none transition-transform duration-200"
+            onClick={() => setOpen((p) => !p)}
+            style={{ display: "inline-block", transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
+          >
+            ▼
+          </span>
+        </div>
+      </div>
+
+      {/* Expanded body */}
       {open && (
         <div className="border-t border-zinc-800 px-5 py-4 space-y-2">
           <p className="text-sm text-zinc-400 italic border-l-2 border-blue-700 pl-3 mb-4">
@@ -199,9 +281,7 @@ function GoalCard({ goal, allNodes }: { goal: GoalNode; allNodes: GoalNode[] }) 
           {children.length === 0 ? (
             <p className="text-sm text-zinc-600 italic">No sub-goals or tasks yet.</p>
           ) : (
-            children.map((child) => (
-              <ChildCard key={child.id} node={child} allNodes={allNodes} />
-            ))
+            children.map((child) => <ChildCard key={child.id} node={child} allNodes={allNodes} />)
           )}
         </div>
       )}
@@ -209,38 +289,8 @@ function GoalCard({ goal, allNodes }: { goal: GoalNode; allNodes: GoalNode[] }) 
   );
 }
 
-// ─── Toggle Switch ─────────────────────────────────────────────────────────────
-function ToggleSwitch({
-  checked,
-  onChange,
-  id,
-}: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  id: string;
-}) {
-  return (
-    <button
-      type="button"
-      id={id}
-      role="switch"
-      aria-checked={checked}
-      onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-7 w-14 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 ${
-        checked ? "bg-red-600" : "bg-zinc-700"
-      }`}
-    >
-      <span
-        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform duration-200 ${
-          checked ? "translate-x-8" : "translate-x-1"
-        }`}
-      />
-    </button>
-  );
-}
-
 // ─── Add Goal / Task Modal ─────────────────────────────────────────────────────
-function AddGoalModal({
+function AddNodeModal({
   userId,
   allNodes,
   onClose,
@@ -251,25 +301,27 @@ function AddGoalModal({
 }) {
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState("");
+  const [isTask, setIsTask]     = useState(false);
+
+  // Common fields
   const [title, setTitle]       = useState("");
   const [reason, setReason]     = useState("");
   const [deadline, setDeadline] = useState("");
   const [parentId, setParentId] = useState("");
-  const [isTask, setIsTask]     = useState(false);
 
-  // Task-specific fields
+  // Task-only fields
   const [effortType, setEffortType]           = useState<EffortType>("DEEP_WORK");
   const [estimatedTime, setEstimatedTime]     = useState("");
   const [targetQuantity, setTargetQuantity]   = useState("");
   const [quantifierUnit, setQuantifierUnit]   = useState("");
 
-  // Only non-task nodes can be parents
+  // Only goals (non-tasks) can be parents
   const goalNodes = allNodes.filter((n) => !n.isTask);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isTask && !parentId) {
-      setError("A Task must have a parent goal.");
+      setError("A task must be attached to a parent goal.");
       return;
     }
     setLoading(true);
@@ -283,13 +335,12 @@ function AddGoalModal({
       parentId: parentId || undefined,
       isTask,
       effortType: isTask ? effortType : "NOT_APPLICABLE",
-      estimatedTime:   isTask && estimatedTime   ? Number(estimatedTime)   : undefined,
-      targetQuantity:  isTask && targetQuantity  ? Number(targetQuantity)  : undefined,
-      quantifierUnit:  isTask && quantifierUnit  ? quantifierUnit          : undefined,
+      estimatedTime:  isTask && estimatedTime  ? Number(estimatedTime)  : undefined,
+      targetQuantity: isTask && targetQuantity ? Number(targetQuantity) : undefined,
+      quantifierUnit: isTask && quantifierUnit ? quantifierUnit         : undefined,
     });
 
     setLoading(false);
-
     if (!res.success) {
       setError(res.error || "Failed to create.");
     } else {
@@ -299,19 +350,20 @@ function AddGoalModal({
 
   const inputCls =
     "w-full bg-zinc-950 border border-zinc-700 rounded-lg px-4 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors";
-  const labelCls = "block text-xs font-semibold uppercase tracking-widest text-zinc-400 mb-1.5";
+  const labelCls =
+    "block text-xs font-semibold uppercase tracking-widest text-zinc-400 mb-1.5";
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-4 pb-4 sm:pb-0">
-      {/* Backdrop */}
       <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" onClick={onClose} />
 
-      {/* Panel */}
       <div className="relative w-full max-w-lg bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl shadow-black/50 z-10 max-h-[92vh] overflow-y-auto">
-        {/* Header */}
+        {/* Sticky header */}
         <div className="sticky top-0 bg-zinc-900 border-b border-zinc-800 px-6 py-4 flex items-center justify-between rounded-t-2xl z-10">
           <div className="flex items-center gap-3">
-            <h2 className="text-lg font-black text-white">New {isTask ? "Task" : "Goal"}</h2>
+            <h2 className="text-lg font-black text-white">
+              New {isTask ? "Task" : "Goal"}
+            </h2>
             <span
               className={`text-xs font-bold px-2.5 py-1 rounded-full border ${
                 isTask
@@ -324,15 +376,17 @@ function AddGoalModal({
           </div>
           <button
             onClick={onClose}
-            className="text-zinc-500 hover:text-zinc-200 transition-colors w-8 h-8 flex items-center justify-center rounded-full hover:bg-zinc-800"
+            className="w-8 h-8 flex items-center justify-center rounded-full text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors"
           >
             ✕
           </button>
         </div>
 
-        {/* Goal / Task Toggle — the primary UX decision */}
+        {/* Goal / Task type selector */}
         <div className="px-6 pt-5 pb-4 border-b border-zinc-800">
-          <p className="text-xs text-zinc-500 uppercase tracking-widest font-semibold mb-3">What are you creating?</p>
+          <p className="text-xs uppercase tracking-widest text-zinc-500 font-semibold mb-3">
+            What are you creating?
+          </p>
           <div className="grid grid-cols-2 gap-3">
             <button
               type="button"
@@ -344,8 +398,12 @@ function AddGoalModal({
               }`}
             >
               <span className="text-2xl">🎯</span>
-              <span className={`text-sm font-bold ${!isTask ? "text-indigo-300" : "text-zinc-400"}`}>High-Level Goal</span>
-              <span className="text-xs text-zinc-600 text-center leading-tight">A broad objective. Broken into sub-goals or tasks.</span>
+              <span className={`text-sm font-bold ${!isTask ? "text-indigo-300" : "text-zinc-400"}`}>
+                High-Level Goal
+              </span>
+              <span className="text-xs text-zinc-600 text-center leading-tight">
+                A broad objective. Break it down into tasks.
+              </span>
             </button>
 
             <button
@@ -358,8 +416,12 @@ function AddGoalModal({
               }`}
             >
               <span className="text-2xl">⚡</span>
-              <span className={`text-sm font-bold ${isTask ? "text-red-300" : "text-zinc-400"}`}>Executable Task</span>
-              <span className="text-xs text-zinc-600 text-center leading-tight">A leaf-level action logged daily. Requires metrics.</span>
+              <span className={`text-sm font-bold ${isTask ? "text-red-300" : "text-zinc-400"}`}>
+                Executable Task
+              </span>
+              <span className="text-xs text-zinc-600 text-center leading-tight">
+                A measurable action logged daily.
+              </span>
             </button>
           </div>
         </div>
@@ -405,14 +467,19 @@ function AddGoalModal({
               type="date"
               value={deadline}
               onChange={(e) => setDeadline(e.target.value)}
-              className={inputCls}
+              className={`${inputCls} [color-scheme:dark]`}
             />
           </div>
 
           {/* Parent Goal */}
           <div>
             <label className={labelCls}>
-              Parent Goal {isTask && <span className="text-red-400 normal-case tracking-normal font-normal">*required for tasks</span>}
+              Parent Goal
+              {isTask && (
+                <span className="ml-1 text-red-400 normal-case tracking-normal font-normal">
+                  * required for tasks
+                </span>
+              )}
             </label>
             <select
               value={parentId}
@@ -420,7 +487,7 @@ function AddGoalModal({
               required={isTask}
               className={`${inputCls} [color-scheme:dark]`}
             >
-              <option value="">— Top-level goal (no parent) —</option>
+              <option value="">— Top-level (no parent) —</option>
               {goalNodes.map((n) => (
                 <option key={n.id} value={n.id}>{n.title}</option>
               ))}
@@ -429,10 +496,12 @@ function AddGoalModal({
 
           {/* ── TASK-ONLY FIELDS ── */}
           {isTask && (
-            <div className="bg-zinc-950/80 border border-red-900/40 rounded-xl p-4 space-y-4">
-              <div className="flex items-center gap-2 mb-1">
+            <div className="bg-zinc-950/90 border border-red-900/40 rounded-xl p-4 space-y-4">
+              <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                <p className="text-xs font-bold uppercase tracking-widest text-red-400">Task Execution Metrics</p>
+                <p className="text-xs font-bold uppercase tracking-widest text-red-400">
+                  Task Execution Metrics
+                </p>
               </div>
 
               {/* Effort Type */}
@@ -449,7 +518,7 @@ function AddGoalModal({
                 </select>
               </div>
 
-              {/* Estimated Time + Target Qty side by side */}
+              {/* Estimated Time + Target Qty */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={labelCls}>Estimated Time (hrs)</label>
@@ -479,7 +548,7 @@ function AddGoalModal({
 
               {/* Quantifier Unit */}
               <div>
-                <label className={labelCls}>Quantifier Unit (label)</label>
+                <label className={labelCls}>Quantifier Unit</label>
                 <input
                   type="text"
                   value={quantifierUnit}
@@ -487,7 +556,9 @@ function AddGoalModal({
                   placeholder="e.g. LeetCode Problems, Pages, Commits"
                   className={inputCls}
                 />
-                <p className="mt-1 text-xs text-zinc-600">This label appears next to the progress counter.</p>
+                <p className="mt-1 text-xs text-zinc-600">
+                  Label shown next to the progress counter.
+                </p>
               </div>
             </div>
           )}
@@ -512,13 +583,15 @@ function AddGoalModal({
 // ─── Main Dashboard ────────────────────────────────────────────────────────────
 export default function GoalDashboard({ userId, allNodes }: Props) {
   const [modalOpen, setModalOpen] = useState(false);
+
   const topLevelGoals = allNodes.filter((n) => !n.parentId);
-  const totalTasks = allNodes.filter((n) => n.isTask).length;
-  const activeTasks = allNodes.filter((n) => n.isTask && n.status === "ACTIVE").length;
+  const totalTasks    = allNodes.filter((n) => n.isTask).length;
+  const activeTasks   = allNodes.filter((n) => n.isTask && n.status === "ACTIVE").length;
+  const pausedCount   = allNodes.filter((n) => n.status === "PAUSED").length;
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans">
-      {/* Header */}
+      {/* Sticky header */}
       <div className="border-b border-zinc-800 bg-zinc-950/95 backdrop-blur px-6 py-5 sticky top-0 z-20">
         <div className="mx-auto max-w-3xl flex items-center justify-between">
           <div>
@@ -526,11 +599,14 @@ export default function GoalDashboard({ userId, allNodes }: Props) {
             <p className="text-xs text-zinc-500 mt-0.5 font-mono">
               {topLevelGoals.length} goal{topLevelGoals.length !== 1 ? "s" : ""} ·{" "}
               <span className="text-red-400">{activeTasks}</span>/{totalTasks} tasks active
+              {pausedCount > 0 && (
+                <span className="text-yellow-500 ml-1">· {pausedCount} paused</span>
+              )}
             </p>
           </div>
           <button
             onClick={() => setModalOpen(true)}
-            className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition-all hover:bg-blue-500 hover:shadow-blue-500/25 active:scale-95"
+            className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition-all hover:bg-blue-500 active:scale-95"
           >
             <span className="text-lg leading-none">+</span>
             New Goal / Task
@@ -538,14 +614,14 @@ export default function GoalDashboard({ userId, allNodes }: Props) {
         </div>
       </div>
 
-      {/* Goal cards */}
+      {/* Cards */}
       <div className="mx-auto max-w-3xl px-6 py-8 space-y-4">
         {topLevelGoals.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-center">
             <div className="mb-4 text-5xl">🎯</div>
             <p className="text-lg font-bold text-zinc-400">No goals yet</p>
             <p className="text-sm text-zinc-600 mt-1 mb-6">
-              Define a high-level goal first, then attach executable tasks to it.
+              Define a high-level goal, then attach executable tasks to it.
             </p>
             <button
               onClick={() => setModalOpen(true)}
@@ -561,7 +637,7 @@ export default function GoalDashboard({ userId, allNodes }: Props) {
         )}
       </div>
 
-      {/* Floating + (mobile) */}
+      {/* Mobile FAB */}
       <button
         onClick={() => setModalOpen(true)}
         className="fixed bottom-6 right-6 sm:hidden z-40 flex h-14 w-14 items-center justify-center rounded-full bg-blue-600 text-white text-2xl shadow-2xl shadow-blue-600/30 hover:bg-blue-500 transition-colors"
@@ -571,7 +647,7 @@ export default function GoalDashboard({ userId, allNodes }: Props) {
       </button>
 
       {modalOpen && (
-        <AddGoalModal
+        <AddNodeModal
           userId={userId}
           allNodes={allNodes}
           onClose={() => setModalOpen(false)}

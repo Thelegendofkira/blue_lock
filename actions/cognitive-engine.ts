@@ -2,142 +2,114 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { EffortType, BlockType, FocusState } from "@prisma/client";
+import { EffortType, BlockType, Status } from "@prisma/client";
 
-// ------------------------------------------------------------------
-// 1. ADD A NODE (Goal or Task)
-// ------------------------------------------------------------------
+// 1. ADD NODE
 export async function addGoalNode(data: {
-  userId: string;
-  title: string;
-  reason: string;
-  deadline: Date;
-  parentId?: string;
-  isTask: boolean;
-  effortType: EffortType;
-  targetQuantity?: number;
-  quantifierUnit?: string;
-  estimatedTime?: number;
+  userId: string; title: string; reason: string; deadline: Date;
+  parentId?: string; isTask: boolean; effortType: EffortType;
+  targetQuantity?: number; quantifierUnit?: string; estimatedTime?: number;
 }) {
   try {
     const newNode = await prisma.goalNode.create({
-      data: {
-        userId: data.userId,
-        title: data.title,
-        reason: data.reason,
-        deadline: data.deadline,
-        parentId: data.parentId,
-        isTask: data.isTask,
-        effortType: data.effortType,
-        targetQuantity: data.targetQuantity,
-        quantifierUnit: data.quantifierUnit,
-        estimatedTime: data.estimatedTime,
-        currentQuantity: 0,
-      },
+      data: { ...data, currentQuantity: 0 },
     });
     return { success: true, node: newNode };
   } catch (error) {
-    console.error("Node Creation Failed:", error);
-    return { success: false, error: "Failed to create goal/task." };
+    return { success: false, error: "Failed to create node." };
   }
 }
 
-// ------------------------------------------------------------------
-// 2. LOG A DAILY BLOCK (Upgraded for Multi-Task & Time Tracking)
-// ------------------------------------------------------------------
+// 2. TOGGLE STATUS (The Cascading Pause Logic)
+export async function toggleNodeStatus(nodeId: string, status: Status) {
+  try {
+    const node = await prisma.goalNode.findUnique({ where: { id: nodeId } });
+    if (!node) throw new Error("Node not found");
+
+    const deactivatedAt = status === "ACTIVE" ? null : new Date();
+
+    if (!node.isTask && status === "PAUSED") {
+      // Cascade pause to children
+      await prisma.$transaction([
+        prisma.goalNode.update({ where: { id: nodeId }, data: { status, deactivatedAt } }),
+        prisma.goalNode.updateMany({ where: { parentId: nodeId, status: "ACTIVE" }, data: { status, deactivatedAt } })
+      ]);
+    } else {
+      await prisma.goalNode.update({ where: { id: nodeId }, data: { status, deactivatedAt } });
+    }
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: "Failed to update status." };
+  }
+}
+
+// 3. LOG DAILY BLOCK (The Strict Gatekeeper)
 export async function logDailyBlock(data: {
-  userId: string;
-  date: Date;
-  hourBlock: number;
-  blockType: BlockType;
-  focusState?: FocusState;
-  taskId?: string;
-  valueAchieved?: number; // Quantity
-  timeSpent?: number;     // Hours (e.g., 0.5)
-  notes?: string;         // Verbal descriptor
+  userId: string; date: Date; hourBlock: number; blockType: BlockType;
+  taskId?: string; valueAchieved?: number; timeSpent?: number; notes?: string;
 }) {
   try {
-    // SCENARIO A: Sleep or College
     if (data.blockType !== "TASK_EXECUTION") {
-      const log = await prisma.dailyLog.create({
-        data: {
-          userId: data.userId,
-          date: data.date,
-          hourBlock: data.hourBlock,
-          blockType: data.blockType,
-          focusState: "N_A",
-        },
-      });
+      const log = await prisma.dailyLog.create({ data: { userId: data.userId, date: data.date, hourBlock: data.hourBlock, blockType: data.blockType } });
       return { success: true, log };
     }
 
-    // SCENARIO B: Task Execution
-    if (!data.taskId || data.valueAchieved === undefined || data.timeSpent === undefined) {
-      throw new Error("Execution requires a task, quantity achieved, and time spent.");
-    }
+    if (!data.taskId || data.valueAchieved === undefined || data.timeSpent === undefined) throw new Error("Missing data.");
 
     const task = await prisma.goalNode.findUnique({ where: { id: data.taskId } });
-    if (!task || task.status !== "ACTIVE") throw new Error("Invalid or inactive task.");
+    if (!task || task.status !== "ACTIVE") throw new Error("Task inactive.");
 
-    // 1. Fetch all logs for today
     const todaysLogs = await prisma.dailyLog.findMany({
       where: { userId: data.userId, date: data.date, blockType: "TASK_EXECUTION" },
       include: { task: true },
     });
 
-    // 2. Calculate limits by SUMMING the specific `timeSpent` values
-    let deepWorkHours = 0;
-    let shallowWorkHours = 0;
-    let totalWorkHours = 0;
-    let timeInThisSpecificBlock = 0;
+    let deepWorkHours = 0; let shallowWorkHours = 0; let totalWorkHours = 0; let timeInBlock = 0;
 
     todaysLogs.forEach((log) => {
       const time = log.timeSpent || 0;
       totalWorkHours += time;
-
-      if (log.hourBlock === data.hourBlock) timeInThisSpecificBlock += time;
+      if (log.hourBlock === data.hourBlock) timeInBlock += time;
       if (log.task?.effortType === "DEEP_WORK") deepWorkHours += time;
       if (log.task?.effortType === "SHALLOW_WORK") shallowWorkHours += time;
     });
 
-    // 3. THE UPGRADED GATEKEEPER CHECKS
-    if (timeInThisSpecificBlock + data.timeSpent > 1.0) {
-      return { success: false, error: "You cannot log more than 1 hour of total work inside a single 1-hour block slot." };
-    }
-    if (task.effortType === "DEEP_WORK" && (deepWorkHours + data.timeSpent) > 4) {
-      return { success: false, error: "Deep Work limit (4 hours) exceeded. Execution denied." };
-    }
-    if (task.effortType === "SHALLOW_WORK" && (shallowWorkHours + data.timeSpent) > 2) {
-      return { success: false, error: "Shallow Work limit (2 hours) exceeded. Execution denied." };
-    }
-    if ((totalWorkHours + data.timeSpent) > 12) {
-      return { success: false, error: "Total daily capacity (12 hours) exceeded. Stop working." };
-    }
+    if (timeInBlock + data.timeSpent > 1.0) return { success: false, error: "Cannot exceed 1 hour per block." };
+    if (task.effortType === "DEEP_WORK" && (deepWorkHours + data.timeSpent) > 4) return { success: false, error: "4hr Deep Work limit exceeded." };
+    if (task.effortType === "SHALLOW_WORK" && (shallowWorkHours + data.timeSpent) > 2) return { success: false, error: "2hr Shallow Work limit exceeded." };
+    if ((totalWorkHours + data.timeSpent) > 12) return { success: false, error: "12hr daily limit exceeded." };
 
-    // 4. Execute Transaction
     const transaction = await prisma.$transaction([
       prisma.dailyLog.create({
-        data: {
-          userId: data.userId,
-          date: data.date,
-          hourBlock: data.hourBlock,
-          blockType: data.blockType,
-          focusState: data.focusState || "FOCUSED",
-          taskId: data.taskId,
-          valueAchieved: data.valueAchieved,
-          timeSpent: data.timeSpent,
-          notes: data.notes || "",
-        },
+        data: { ...data, notes: data.notes || "" },
       }),
       prisma.goalNode.update({
         where: { id: data.taskId },
         data: { currentQuantity: { increment: data.valueAchieved } },
       }),
     ]);
-
-    return { success: true, log: transaction[0], taskUpdated: transaction[1] };
+    return { success: true, log: transaction[0] };
   } catch (error) {
-    console.error("Logging Failed:", error);
     return { success: false, error: "Failed to log action." };
+  }
+}
+
+// 4. DELETE LOG (Restores Task Quantity)
+export async function deleteDailyLog(logId: string) {
+  try {
+    const log = await prisma.dailyLog.findUnique({ where: { id: logId } });
+    if (!log) throw new Error("Log not found.");
+
+    if (log.blockType === "TASK_EXECUTION" && log.taskId && log.valueAchieved) {
+      await prisma.$transaction([
+        prisma.goalNode.update({ where: { id: log.taskId }, data: { currentQuantity: { decrement: log.valueAchieved } } }),
+        prisma.dailyLog.delete({ where: { id: logId } })
+      ]);
+    } else {
+      await prisma.dailyLog.delete({ where: { id: logId } });
+    }
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: "Failed to delete log." };
   }
 }

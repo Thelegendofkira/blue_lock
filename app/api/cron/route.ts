@@ -51,7 +51,7 @@ export async function GET(request: Request) {
     // 4. Format data for the LLM
     const summary = logs.map(log => {
       if (log.blockType === "TASK_EXECUTION") {
-        return `[${log.hourBlock}:00] Executed: ${log.task?.title} | Focus: ${log.focusState} | Output: +${log.valueAchieved}`;
+        return `[${log.hourBlock}:00] Executed: ${log.task?.title} | Time: ${log.timeSpent}h | Output: +${log.valueAchieved} | Notes: ${log.notes ?? "none"}`;
       }
       return `[${log.hourBlock}:00] Shielded Block: ${log.blockType}`;
     }).join("\n");

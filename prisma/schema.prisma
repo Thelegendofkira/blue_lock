@@ -10,7 +10,7 @@ datasource db {
 }
 
 // ----------------------------------------------------
-// ENUMS: The strict rules of the application
+// ENUMS
 // ----------------------------------------------------
 
 enum Status {
@@ -21,10 +21,10 @@ enum Status {
 }
 
 enum EffortType {
-  DEEP_WORK      // Max 4 hrs/day
-  SHALLOW_WORK   // Max 2 hrs/day
-  NO_EFFORT      // No limit, but total day < 12 hrs
-  NOT_APPLICABLE // For high-level goals that aren't leaf tasks
+  DEEP_WORK      
+  SHALLOW_WORK   
+  NO_EFFORT      
+  NOT_APPLICABLE 
 }
 
 enum BlockType {
@@ -32,16 +32,6 @@ enum BlockType {
   SLEEP
   COLLEGE
 }
-
-enum FocusState {
-  FOCUSED
-  DISTRACTED
-  N_A // For Sleep/College blocks
-}
-
-// ----------------------------------------------------
-// MODELS
-// ----------------------------------------------------
 
 // ----------------------------------------------------
 // MODELS
@@ -72,16 +62,13 @@ model GoalNode {
   activatedAt     DateTime   @default(now())
   deactivatedAt   DateTime?  
 
-  // --- UPGRADED TASK VARIABLES ---
-  isTask          Boolean    @default(false) // Explicitly defines if it's a Goal or Task
+  isTask          Boolean    @default(false) 
   effortType      EffortType @default(NOT_APPLICABLE)
   
-  quantifierUnit  String?    // e.g., "LeetCode Problems", "Pages", "Commits"
-  targetQuantity  Float?     // The number they are trying to hit
+  quantifierUnit  String?    
+  targetQuantity  Float?     
   currentQuantity Float      @default(0)
-  
-  estimatedTime   Float?     // Estimated total hours to complete this task
-  // -------------------------------
+  estimatedTime   Float?     // Total estimated hours
 
   user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   dailyLogs       DailyLog[]
@@ -95,23 +82,17 @@ model DailyLog {
   userId          String
   
   date            DateTime   
-  hourBlock       Int        // 0 to 23 
-  
+  hourBlock       Int        
   blockType       BlockType  
-  focusState      FocusState @default(N_A)
   
-  // --- UPGRADED LOG VARIABLES ---
+  // Notice focusState is completely gone
   taskId          String?    
-  valueAchieved   Float?     // Quantity achieved (e.g., 3 problems)
-  timeSpent       Float?     // Time spent in HOURS (e.g., 0.5 = 30 mins)
-  notes           String?    @db.Text // The verbal descriptor / mini-journal
-  // ------------------------------
+  valueAchieved   Float?     
+  timeSpent       Float?     
+  notes           String?    @db.Text 
 
   user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   task            GoalNode?  @relation(fields: [taskId], references: [id])
 
-  // REMOVED: @@unique([userId, date, hourBlock]) 
-  // We removed the unique constraint so you can log multiple tasks in the same hour block!
-  
   @@index([userId, date])
 }

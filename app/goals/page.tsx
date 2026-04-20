@@ -22,7 +22,8 @@ export default async function GoalsPage() {
   const allNodes = await prisma.goalNode.findMany({
     where: {
       userId: REAL_USER_ID,
-      status: "ACTIVE", 
+      // Fetch ACTIVE and PAUSED so the dashboard can show paused nodes dimmed
+      status: { in: ["ACTIVE", "PAUSED"] },
     },
     orderBy: {
       activatedAt: 'asc'
