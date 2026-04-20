@@ -1,65 +1,416 @@
 import Image from "next/image";
+import Link from "next/link";
 
-export default function Home() {
+const engines = [
+  {
+    id: "hierarchy",
+    number: "01",
+    title: "Goal Hierarchy & Cognitive Limits",
+    summary: "Infinite nesting. Hard enforcement. No excuses.",
+    features: [
+      {
+        label: "Infinite Nesting",
+        detail:
+          "Goals → Sub-goals (nested as deep as needed) → Tasks. Every layer has a single owner above it.",
+      },
+      {
+        label: "Strict Immutability",
+        detail:
+          "Once a Goal is set, its Deadline and original Reason cannot be changed. You cannot move the goalposts when things get hard.",
+      },
+      {
+        label: "Quantifiable Tasks",
+        detail:
+          "Every leaf-level task must have a measurable target — e.g. 'Solve 50 LeetCode problems' or 'Read 10 chapters'.",
+      },
+      {
+        label: "Cognitive Boundary",
+        detail:
+          "The system physically blocks you from over-scheduling. Deep Work ≤ 4 h/day · Shallow Work ≤ 2 h/day · Total logged time ≤ 12 h/day.",
+      },
+    ],
+  },
+  {
+    id: "daily",
+    number: "02",
+    title: "Daily Execution Engine",
+    summary: "1-hour blocks. Real accountability. Zero ambiguity.",
+    features: [
+      {
+        label: "Dynamic Time Blocking",
+        detail:
+          "Your day is split into 1-hour slots. Within 3 hours of a slot ending, you must log what you did, the task it mapped to, and how much progress you made.",
+      },
+      {
+        label: "Exemptions",
+        detail:
+          "Mark any slot as Sleep or College to instantly shield it from the logging rule. No penalties for time you were legitimately occupied.",
+      },
+      {
+        label: "Distraction Tracking",
+        detail:
+          "Log whether you maintained focus or got distracted each hour. Patterns surface in your weekly retrospective.",
+      },
+    ],
+  },
+  {
+    id: "temporal",
+    number: "03",
+    title: "Temporal Tracking (Jurisdiction)",
+    summary: "Your history is honest. Your progress is precise.",
+    features: [
+      {
+        label: "Goal History",
+        detail:
+          "The system records the exact timeframe every goal and task is active. You can Pause or Stop a task at any time without losing the record.",
+      },
+      {
+        label: "Accurate Calculation",
+        detail:
+          "Progress analysis only judges you against goals that were in your active jurisdiction during that specific timeframe. Past decisions can't distort current metrics.",
+      },
+    ],
+  },
+  {
+    id: "intelligence",
+    number: "04",
+    title: "Intelligence & Accountability Loop",
+    summary: "AI analysis. WhatsApp delivery. No escape.",
+    features: [
+      {
+        label: "7:00 AM Trigger",
+        detail:
+          "Every morning a background job gathers your logs, maps them against active goals, and calculates raw progress — automatically.",
+      },
+      {
+        label: "LLM Analysis",
+        detail:
+          "The data is fed to an LLM that identifies bad habits, flags deviations from your plan, and generates aggressive, focused advice for the day ahead.",
+      },
+      {
+        label: "WhatsApp Delivery",
+        detail:
+          "Your daily report and advice lands directly in WhatsApp via Twilio — no app to open, no dashboard to check.",
+      },
+      {
+        label: "Relentless Reminders",
+        detail:
+          "If a deadline passes and you haven't declared success or failure, the system messages you every single day until you face the result.",
+      },
+    ],
+  },
+  {
+    id: "retrospectives",
+    number: "05",
+    title: "Retrospectives",
+    summary: "Weekly & monthly dashboards. Cached. Intelligent.",
+    features: [
+      {
+        label: "Historical Dashboards",
+        detail:
+          "Zoomed-out views of your weekly and monthly execution. See patterns you can't spot in the daily grind.",
+      },
+      {
+        label: "Cached Analysis",
+        detail:
+          "Past weeks are stored in the database. The LLM only re-analyses a past week if the underlying data is retroactively changed — preventing wasteful recomputation.",
+      },
+    ],
+  },
+];
+
+const appNavLinks = [
+  { href: "/daily",   label: "Daily" },
+  { href: "/goals",   label: "Goals" },
+  { href: "/weekly",  label: "Weekly" },
+  { href: "/monthly", label: "Monthly" },
+];
+
+export default function HomePage() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans scroll-smooth">
+
+      {/* ── NAVBAR ─────────────────────────────────────────────── */}
+      <header className="sticky top-0 z-50 border-b border-zinc-800/60 bg-zinc-950/80 backdrop-blur-md">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+          {/* Logo wordmark */}
+          <a href="#" className="flex items-center gap-3 group">
             <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+              src="/logo.png"
+              alt="App logo"
+              width={36}
+              height={36}
+              className="drop-shadow-[0_0_8px_rgba(37,99,235,0.6)] transition-transform group-hover:scale-110"
             />
-            Deploy Now
+            <span className="text-lg font-black tracking-tight text-white">
+              Blue<span className="text-blue-500">Lock</span>
+            </span>
           </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+
+          {/* Desktop nav */}
+          <nav className="hidden md:flex items-center gap-6">
+            {appNavLinks.map((l) => (
+              <Link
+                key={l.href}
+                href={l.href}
+                className="text-sm font-medium text-zinc-400 transition-colors hover:text-blue-400"
+              >
+                {l.label}
+              </Link>
+            ))}
+          </nav>
+
+          {/* CTA */}
+          <div className="flex items-center gap-3">
+            <Link
+              href="/login"
+              className="hidden sm:block text-sm font-semibold text-zinc-300 transition-colors hover:text-white"
+            >
+              Sign In
+            </Link>
+            <Link
+              href="/register"
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white transition-all hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-zinc-950"
+            >
+              Get Started
+            </Link>
+          </div>
+        </div>
+      </header>
+
+      {/* ── HERO ───────────────────────────────────────────────── */}
+      <section className="relative flex flex-col items-center justify-center overflow-hidden px-6 py-32 text-center">
+        {/* Background glows */}
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+          <div className="absolute left-1/2 top-0 h-[600px] w-[600px] -translate-x-1/2 -translate-y-1/4 rounded-full bg-blue-600/10 blur-3xl" />
+          <div className="absolute right-0 top-1/2 h-[350px] w-[350px] rounded-full bg-blue-800/8 blur-3xl" />
+        </div>
+
+        {/* Logo */}
+        <div className="relative mb-8">
+          <div className="absolute inset-0 rounded-full bg-blue-600/20 blur-2xl" />
+          <Image
+            src="/logo.png"
+            alt="App logo"
+            width={96}
+            height={96}
+            priority
+            className="relative drop-shadow-[0_0_24px_rgba(37,99,235,0.7)]"
+          />
+        </div>
+
+        {/* Blue Lock Quote */}
+        <blockquote className="relative mb-8 max-w-2xl">
+          <span className="absolute -left-4 -top-4 text-7xl leading-none text-blue-600/20 font-serif select-none">&ldquo;</span>
+          <p className="relative text-xl font-semibold italic leading-relaxed text-blue-200 md:text-2xl">
+            The selfish one who devours all others will become the best striker in the world.
+          </p>
+          <footer className="mt-3 text-sm font-medium tracking-widest text-blue-500 uppercase">
+            — Ego Jinpachi, Blue Lock
+          </footer>
+        </blockquote>
+
+        {/* Tagline */}
+        <h1 className="mb-4 text-4xl font-black tracking-tight text-white md:text-6xl">
+          Your Cognitive{" "}
+          <span className="bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent">
+            Command Centre
+          </span>
+        </h1>
+        <p className="mb-10 max-w-xl text-base text-zinc-400 md:text-lg">
+          A ruthlessly structured goal and time management system with AI
+          accountability. Built for people who are serious about getting better.
+        </p>
+
+        {/* Hero CTAs */}
+        <div className="flex flex-wrap items-center justify-center gap-4">
+          <Link
+            href="/register"
+            className="rounded-xl bg-blue-600 px-7 py-3.5 text-sm font-bold uppercase tracking-widest text-white shadow-lg shadow-blue-600/25 transition-all hover:bg-blue-500 hover:shadow-blue-500/30 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-zinc-950"
           >
-            Documentation
+            Start Now
+          </Link>
+          <a
+            href="#features"
+            className="rounded-xl border border-zinc-700 px-7 py-3.5 text-sm font-bold uppercase tracking-widest text-zinc-300 transition-all hover:border-blue-600 hover:text-blue-400"
+          >
+            See How It Works ↓
           </a>
         </div>
-      </main>
+      </section>
+
+      {/* ── STATS BAR ──────────────────────────────────────────── */}
+      <section className="border-y border-zinc-800 bg-zinc-900/50">
+        <div className="mx-auto grid max-w-6xl grid-cols-2 divide-x divide-zinc-800 px-6 md:grid-cols-4">
+          {[
+            { value: "4 h", label: "Max Deep Work / Day" },
+            { value: "1 h", label: "Logging Resolution" },
+            { value: "7 AM", label: "Daily AI Report" },
+            { value: "∞", label: "Goal Nesting Depth" },
+          ].map((s) => (
+            <div key={s.label} className="flex flex-col items-center py-8 px-4 text-center">
+              <span className="text-3xl font-black text-blue-400">{s.value}</span>
+              <span className="mt-1 text-xs font-semibold uppercase tracking-widest text-zinc-500">
+                {s.label}
+              </span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── FEATURES OVERVIEW ──────────────────────────────────── */}
+      <section id="features" className="px-6 py-24">
+        <div className="mx-auto max-w-6xl">
+          <div className="mb-16 text-center">
+            <span className="mb-3 inline-block text-xs font-bold uppercase tracking-[0.3em] text-blue-500">
+              System Architecture
+            </span>
+            <h2 className="text-3xl font-black text-white md:text-4xl">
+              Five Engines. Zero Compromises.
+            </h2>
+            <p className="mx-auto mt-4 max-w-xl text-zinc-400">
+              Every feature is designed to eliminate the gap between what you
+              plan and what you actually do.
+            </p>
+          </div>
+
+          {/* Engine cards */}
+          <div className="space-y-6">
+            {engines.map((engine) => (
+              <div
+                key={engine.id}
+                id={engine.id}
+                className="group rounded-2xl border border-zinc-800 bg-zinc-900/60 p-8 transition-colors hover:border-blue-700/60 hover:bg-zinc-900"
+              >
+                {/* Engine header */}
+                <div className="mb-6 flex items-start gap-5">
+                  <span className="flex-shrink-0 rounded-xl border border-blue-700/40 bg-blue-600/10 px-3 py-1 text-xs font-black tracking-widest text-blue-400 uppercase">
+                    {engine.number}
+                  </span>
+                  <div>
+                    <h3 className="text-xl font-black text-white">
+                      {engine.title}
+                    </h3>
+                    <p className="mt-1 text-sm font-medium italic text-blue-400">
+                      {engine.summary}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Feature list */}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {engine.features.map((f) => (
+                    <div
+                      key={f.label}
+                      className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4"
+                    >
+                      <p className="mb-1 text-sm font-bold text-blue-300">
+                        {f.label}
+                      </p>
+                      <p className="text-sm leading-relaxed text-zinc-400">
+                        {f.detail}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── QUICK NAV CARDS ────────────────────────────────────── */}
+      <section className="px-6 pb-24">
+        <div className="mx-auto max-w-6xl">
+          <div className="mb-12 text-center">
+            <span className="mb-3 inline-block text-xs font-bold uppercase tracking-[0.3em] text-blue-500">
+              Navigate
+            </span>
+            <h2 className="text-2xl font-black text-white md:text-3xl">
+              Jump into your dashboard
+            </h2>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              {
+                href: "/daily",
+                label: "Daily View",
+                desc: "Log your 1-hour blocks and track today's execution.",
+                icon: "📅",
+              },
+              {
+                href: "/goals",
+                label: "Goal Tree",
+                desc: "Manage your full goal hierarchy and active tasks.",
+                icon: "🎯",
+              },
+              {
+                href: "/weekly",
+                label: "Weekly Report",
+                desc: "Review your week's execution and AI analysis.",
+                icon: "📊",
+              },
+              {
+                href: "/monthly",
+                label: "Monthly Overview",
+                desc: "Zoom out and spot long-term patterns.",
+                icon: "🗓️",
+              },
+            ].map((card) => (
+              <Link
+                key={card.href}
+                href={card.href}
+                className="group rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 transition-all hover:border-blue-600/60 hover:bg-zinc-900 hover:-translate-y-0.5"
+              >
+                <span className="mb-3 block text-3xl">{card.icon}</span>
+                <p className="mb-1 font-bold text-white group-hover:text-blue-300 transition-colors">
+                  {card.label}
+                </p>
+                <p className="text-sm text-zinc-500">{card.desc}</p>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── FOOTER CTA ─────────────────────────────────────────── */}
+      <section className="border-t border-zinc-800 bg-zinc-900/40 px-6 py-20 text-center">
+        <Image
+          src="/logo.png"
+          alt="App logo"
+          width={48}
+          height={48}
+          className="mx-auto mb-6 drop-shadow-[0_0_12px_rgba(37,99,235,0.5)]"
+        />
+        <h2 className="mb-4 text-3xl font-black text-white">
+          Ready to stop drifting?
+        </h2>
+        <p className="mx-auto mb-8 max-w-md text-zinc-400">
+          Create your account and let the system hold you accountable from day one.
+        </p>
+        <Link
+          href="/register"
+          className="inline-block rounded-xl bg-blue-600 px-8 py-4 text-sm font-bold uppercase tracking-widest text-white shadow-lg shadow-blue-600/20 transition-all hover:bg-blue-500"
+        >
+          Create Free Account
+        </Link>
+      </section>
+
+      {/* ── FOOTER ─────────────────────────────────────────────── */}
+      <footer className="border-t border-zinc-800 px-6 py-8">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 sm:flex-row">
+          <div className="flex items-center gap-2 text-sm font-bold text-zinc-500">
+            <Image src="/logo.png" alt="" width={18} height={18} />
+            Blue<span className="text-blue-500">Lock</span>
+          </div>
+          <div className="flex gap-6">
+            <Link href="/login" className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors">Sign In</Link>
+            <Link href="/register" className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors">Register</Link>
+            <Link href="/daily" className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors">Dashboard</Link>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

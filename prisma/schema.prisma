@@ -1,0 +1,110 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  
+}
+
+// ----------------------------------------------------
+// ENUMS: The strict rules of the application
+// ----------------------------------------------------
+
+enum Status {
+  ACTIVE
+  PAUSED
+  STOPPED
+  COMPLETED
+}
+
+enum EffortType {
+  DEEP_WORK      // Max 4 hrs/day
+  SHALLOW_WORK   // Max 2 hrs/day
+  NO_EFFORT      // No limit, but total day < 12 hrs
+  NOT_APPLICABLE // For high-level goals that aren't leaf tasks
+}
+
+enum BlockType {
+  TASK_EXECUTION
+  SLEEP
+  COLLEGE
+}
+
+enum FocusState {
+  FOCUSED
+  DISTRACTED
+  N_A // For Sleep/College blocks
+}
+
+// ----------------------------------------------------
+// MODELS
+// ----------------------------------------------------
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String   // Hashed
+  createdAt DateTime @default(now())
+
+  // Relations
+  nodes     GoalNode[]
+  dailyLogs DailyLog[]
+}
+
+model GoalNode {
+  id              String   @id @default(cuid())
+  userId          String
+  title           String
+  reason          String   // Immutable core reason
+  deadline        DateTime // Immutable deadline
+  
+  // The Hierarchy (Adjacency List)
+  parentId        String?
+  parent          GoalNode?  @relation("NodeHierarchy", fields: [parentId], references: [id])
+  children        GoalNode[] @relation("NodeHierarchy")
+
+  // The Jurisdiction (Temporal Tracking)
+  status          Status     @default(ACTIVE)
+  activatedAt     DateTime   @default(now())
+  deactivatedAt   DateTime?  // Stamped when paused/stopped/completed
+
+  // Execution Limits & Metrics (Required for bottom-level Tasks)
+  effortType      EffortType @default(NOT_APPLICABLE)
+  targetQuantity  Float?     // e.g., 50 (problems, hours, etc.)
+  currentQuantity Float      @default(0)
+
+  // Relations
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dailyLogs       DailyLog[]
+
+  @@index([userId])
+  @@index([parentId])
+}
+
+model DailyLog {
+  id              String     @id @default(cuid())
+  userId          String
+  
+  // The Time Block
+  date            DateTime   // e.g., 2026-04-19 (Stripped of time)
+  hourBlock       Int        // 0 to 23 (Represents the 1-hour slot)
+  
+  // What happened?
+  blockType       BlockType  // SLEEP, COLLEGE, or TASK_EXECUTION
+  focusState      FocusState @default(N_A)
+  
+  // The Action (If blockType is TASK_EXECUTION)
+  taskId          String?    // Points to the specific GoalNode
+  valueAchieved   Float?     // How much quantity was added to the task
+  
+  // Relations
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task            GoalNode?  @relation(fields: [taskId], references: [id])
+
+  // Constraints: A user can only have one log per hour block per day
+  @@unique([userId, date, hourBlock])
+  @@index([userId, date])
+}
