@@ -41,6 +41,7 @@ interface Task {
 
 interface DailyLog {
   id: string;
+  date: Date | string;
   hourBlock: number;
   blockType: BlockType;
   taskId: string | null;
@@ -53,7 +54,9 @@ interface DailyLog {
 interface DailyGridProps {
   userId: string;
   activeTasks: Task[];
-  todaysLogs: DailyLog[];
+  recentLogs: DailyLog[];
+  logicalToday: Date;
+  logicalYesterday: Date;
 }
 
 type VoiceState = "idle" | "listening" | "processing" | "filled" | "error";
@@ -66,8 +69,9 @@ function fmtHrs(h: number | null | undefined) {
 }
 
 const blockTypeLabel: Record<string, string> = {
-  SLEEP:   "💤 Sleep",
-  COLLEGE: "🏫 College",
+  SLEEP:       "💤 Sleep",
+  COLLEGE:     "🏫 College",
+  DISTRACTION: "⚠️ Distraction",
 };
 
 // ─── Delete Button ─────────────────────────────────────────────────────────────
@@ -116,11 +120,17 @@ function DeleteLogButton({ logId }: { logId: string }) {
 
 // ─── Review Entry ──────────────────────────────────────────────────────────────
 function ReviewEntry({ log }: { log: DailyLog }) {
+  const isDistraction = log.blockType === "DISTRACTION";
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 space-y-2.5">
+    <div className={`rounded-xl border p-4 space-y-2.5 ${
+      isDistraction ? "border-red-900/60 bg-red-950/20" : "border-zinc-800 bg-zinc-950"
+    }`}>
       <div className="flex items-start justify-between gap-3">
-        <p className="text-sm font-bold text-white leading-tight">
-          {log.task?.title ?? <span className="italic text-zinc-500">Unknown task</span>}
+        <p className="text-sm font-bold leading-tight">
+          {isDistraction
+            ? <span className="text-red-400">⚠️ Distraction Logged</span>
+            : (log.task?.title ?? <span className="italic text-zinc-500">Unknown task</span>)
+          }
         </p>
         <DeleteLogButton logId={log.id} />
       </div>
@@ -132,9 +142,10 @@ function ReviewEntry({ log }: { log: DailyLog }) {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6l4 2"/>
           </svg>
           {fmtHrs(log.timeSpent)}
+          {isDistraction && <span className="text-red-400 font-sans font-bold ml-1">wasted</span>}
         </span>
 
-        {log.valueAchieved != null && (
+        {!isDistraction && log.valueAchieved != null && (
           <span className="flex items-center gap-1.5 text-zinc-300">
             <svg className="w-3 h-3 text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
@@ -149,7 +160,10 @@ function ReviewEntry({ log }: { log: DailyLog }) {
       </div>
 
       {log.notes && (
-        <p className="text-xs text-zinc-500 italic border-l-2 border-zinc-700 pl-2.5 leading-relaxed">
+        <p className={`text-xs italic border-l-2 pl-2.5 leading-relaxed ${
+          isDistraction ? "text-red-400/80 border-red-700" : "text-zinc-500 border-zinc-700"
+        }`}>
+          {isDistraction && <span className="font-bold not-italic">Confession: </span>}
           {log.notes}
         </p>
       )}
@@ -167,15 +181,24 @@ function BlockCell({
   logs: DailyLog[];
   onClick: () => void;
 }) {
-  const taskLogs   = logs.filter((l) => l.blockType === "TASK_EXECUTION");
-  const nonTaskLog = logs.find((l)  => l.blockType !== "TASK_EXECUTION");
-  const totalTime  = taskLogs.reduce((s, l) => s + (l.timeSpent ?? 0), 0);
-  const isNow      = new Date().getHours() === hour;
+  const taskLogs      = logs.filter((l) => l.blockType === "TASK_EXECUTION");
+  const distractionLog = logs.find((l) => l.blockType === "DISTRACTION");
+  const nonTaskLog    = logs.find((l) => l.blockType !== "TASK_EXECUTION" && l.blockType !== "DISTRACTION");
+  const totalTime     = taskLogs.reduce((s, l) => s + (l.timeSpent ?? 0), 0);
+  const isNow         = new Date().getHours() === hour;
 
   let cellCls = "bg-zinc-900/70 border-zinc-800 hover:border-blue-500/60 hover:bg-zinc-800/80 cursor-pointer";
   let content: React.ReactNode = null;
 
-  if (nonTaskLog) {
+  if (distractionLog) {
+    cellCls = "bg-red-950/40 border-red-700/60 shadow-[0_0_12px_rgba(239,68,68,0.15)] cursor-pointer";
+    content = (
+      <div className="space-y-0.5">
+        <p className="text-xs font-bold text-red-400">⚠️ Distraction</p>
+        <p className="text-xs text-red-500/70 font-mono">{fmtHrs(distractionLog.timeSpent)} wasted</p>
+      </div>
+    );
+  } else if (nonTaskLog) {
     cellCls = "bg-zinc-900/50 border-zinc-700/40 opacity-55 cursor-default";
     content = <span className="text-xs font-semibold text-zinc-400 truncate">{blockTypeLabel[nonTaskLog.blockType]}</span>;
   } else if (taskLogs.length === 1) {
@@ -234,67 +257,83 @@ function BlockCell({
 
 // ─── Mic Button ───────────────────────────────────────────────────────────────
 function MicButton({
+  isRecording,
   voiceState,
-  onStart,
-  onStop,
+  onToggle,
 }: {
+  isRecording: boolean;
   voiceState: VoiceState;
-  onStart: () => void;
-  onStop: () => void;
+  onToggle: () => void;
 }) {
-  const isListening   = voiceState === "listening";
-  const isProcessing  = voiceState === "processing";
-  const isFilled      = voiceState === "filled";
-  const isError       = voiceState === "error";
-  const isDisabled    = isProcessing;
+  const isProcessing = voiceState === "processing";
+  const isFilled     = voiceState === "filled";
+  const isDisabled   = isProcessing;
 
-  const glow = isListening
-    ? "shadow-[0_0_0_4px_rgba(239,68,68,0.25),0_0_20px_rgba(239,68,68,0.5)]"
-    : isFilled
-    ? "shadow-[0_0_0_3px_rgba(74,222,128,0.3),0_0_16px_rgba(74,222,128,0.3)]"
-    : "shadow-[0_0_0_3px_rgba(37,99,235,0.2),0_0_12px_rgba(37,99,235,0.3)]";
-
-  const bg = isListening
-    ? "bg-red-600 hover:bg-red-500"
+  // Visual variants
+  const bg = isRecording
+    ? "bg-red-600 hover:bg-red-500 animate-pulse"
     : isFilled
     ? "bg-green-700 hover:bg-green-600"
-    : isError
+    : voiceState === "error"
     ? "bg-zinc-700 hover:bg-zinc-600"
     : "bg-blue-700 hover:bg-blue-600";
 
-  return (
-    <button
-      type="button"
-      onClick={isListening ? onStop : onStart}
-      disabled={isDisabled}
-      title={isListening ? "Stop listening" : "Voice log — speak your session"}
-      aria-label={isListening ? "Stop recording" : "Start voice log"}
-      className={`
-        relative w-11 h-11 flex-shrink-0 rounded-xl flex items-center justify-center
-        transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed
-        ${bg} ${isListening || isFilled ? glow : ""}
-      `}
-    >
-      {/* Ripple ring when listening */}
-      {isListening && (
-        <span className="absolute inset-0 rounded-xl animate-ping bg-red-500/30" />
-      )}
+  const ringGlow = isRecording
+    ? "shadow-[0_0_0_4px_rgba(239,68,68,0.3),0_0_24px_rgba(239,68,68,0.6)]"
+    : isFilled
+    ? "shadow-[0_0_0_3px_rgba(74,222,128,0.3),0_0_16px_rgba(74,222,128,0.3)]"
+    : "";
 
-      {/* Spinner when processing */}
-      {isProcessing ? (
-        <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-      ) : (
-        /* Microphone SVG icon */
-        <svg
-          className="w-5 h-5 text-white relative z-10"
-          fill="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm0 2a2 2 0 0 0-2 2v6a2 2 0 0 0 4 0V5a2 2 0 0 0-2-2z"/>
-          <path d="M19 11a1 1 0 0 1 1 1 8 8 0 0 1-7 7.938V22h2a1 1 0 0 1 0 2H9a1 1 0 0 1 0-2h2v-2.062A8 8 0 0 1 4 12a1 1 0 0 1 2 0 6 6 0 0 0 12 0 1 1 0 0 1 1-1z"/>
-        </svg>
-      )}
-    </button>
+  const label = isRecording
+    ? "Recording… Tap to Stop"
+    : isProcessing
+    ? "Processing…"
+    : isFilled
+    ? "Filled — edit or lock in"
+    : "Tap to Voice Log";
+
+  return (
+    <div className="flex items-center gap-3">
+      <button
+        type="button"
+        onClick={onToggle}
+        disabled={isDisabled}
+        title={label}
+        aria-label={label}
+        className={`
+          relative w-11 h-11 flex-shrink-0 rounded-xl flex items-center justify-center
+          transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed
+          ${bg} ${ringGlow}
+        `}
+      >
+        {/* Outer pulse ring — only while actively recording */}
+        {isRecording && (
+          <span className="absolute inset-0 rounded-xl animate-ping bg-red-400/30 pointer-events-none" />
+        )}
+
+        {isProcessing ? (
+          <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+        ) : isRecording ? (
+          /* Stop icon */
+          <svg className="w-4 h-4 text-white relative z-10" fill="currentColor" viewBox="0 0 24 24">
+            <rect x="5" y="5" width="14" height="14" rx="2" />
+          </svg>
+        ) : (
+          /* Microphone icon */
+          <svg className="w-5 h-5 text-white relative z-10" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm0 2a2 2 0 0 0-2 2v6a2 2 0 0 0 4 0V5a2 2 0 0 0-2-2z"/>
+            <path d="M19 11a1 1 0 0 1 1 1 8 8 0 0 1-7 7.938V22h2a1 1 0 0 1 0 2H9a1 1 0 0 1 0-2h2v-2.062A8 8 0 0 1 4 12a1 1 0 0 1 2 0 6 6 0 0 0 12 0 1 1 0 0 1 1-1z"/>
+          </svg>
+        )}
+      </button>
+
+      {/* Inline label */}
+      <span className={`text-xs font-bold transition-colors ${
+        isRecording ? "text-red-400" : isProcessing ? "text-blue-400" : isFilled ? "text-green-400" : "text-zinc-500"
+      }`}>
+        {label}
+      </span>
+    </div>
   );
 }
 
@@ -371,10 +410,13 @@ function BlockModal({
   userId: string;
   onClose: () => void;
 }) {
-  const taskLogs   = logsForHour.filter((l) => l.blockType === "TASK_EXECUTION");
-  const nonTaskLog = logsForHour.find((l)  => l.blockType !== "TASK_EXECUTION");
+  const taskLogs       = logsForHour.filter((l) => l.blockType === "TASK_EXECUTION");
+  const distractionLog = logsForHour.find((l)  => l.blockType === "DISTRACTION");
+  const nonTaskLog     = logsForHour.find((l)  => l.blockType !== "TASK_EXECUTION" && l.blockType !== "DISTRACTION");
+  // Reviewable logs are task + distraction entries (not sleep/college)
+  const reviewableLogs = logsForHour.filter((l) => l.blockType === "TASK_EXECUTION" || l.blockType === "DISTRACTION");
 
-  const [tab, setTab] = useState<"review" | "add">(taskLogs.length > 0 ? "review" : "add");
+  const [tab, setTab] = useState<"review" | "add">(reviewableLogs.length > 0 ? "review" : "add");
 
   // ── Form state ──
   const [blockType, setBlockType]         = useState<BlockType>(nonTaskLog ? nonTaskLog.blockType : "TASK_EXECUTION");
@@ -386,10 +428,13 @@ function BlockModal({
   const [error, setError]                 = useState("");
 
   // ── Voice state ──
-  const [voiceState, setVoiceState] = useState<VoiceState>("idle");
-  const [transcript, setTranscript] = useState("");
-  const [voiceError, setVoiceError] = useState("");
-  const recognitionRef              = useRef<ISpeechRecognition | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [voiceState, setVoiceState]   = useState<VoiceState>("idle");
+  const [transcript, setTranscript]   = useState("");
+  const [voiceError, setVoiceError]   = useState("");
+  const recognitionRef                = useRef<ISpeechRecognition | null>(null);
+  // Accumulates interim results across multiple `onresult` events
+  const transcriptRef                 = useRef("");
 
   const usedTime  = taskLogs.reduce((s, l) => s + (l.timeSpent ?? 0), 0);
   const remaining = Math.max(0, parseFloat((1.0 - usedTime).toFixed(2)));
@@ -400,8 +445,17 @@ function BlockModal({
     return () => { recognitionRef.current?.stop(); };
   }, []);
 
-  // ── Voice: start listening ──
-  const startListening = () => {
+  // ── Voice: unified Start/Stop toggle ──
+  const toggleRecording = () => {
+    // ── STOP ──
+    if (isRecording) {
+      setIsRecording(false);
+      recognitionRef.current?.stop();
+      // onend fires → sets voiceState to "processing" → useEffect sends to API
+      return;
+    }
+
+    // ── START ──
     const SpeechRecognitionImpl =
       window.SpeechRecognition ?? window.webkitSpeechRecognition;
 
@@ -411,38 +465,41 @@ function BlockModal({
       return;
     }
 
-    setVoiceState("listening");
+    // Reset prior run
+    transcriptRef.current = "";
     setTranscript("");
     setVoiceError("");
+    setVoiceState("listening");
+    setIsRecording(true);
 
     const recognition = new SpeechRecognitionImpl();
-    recognition.continuous      = false;
-    recognition.interimResults  = false;
-    recognition.lang             = "en-US";
-    recognitionRef.current       = recognition;
+    // continuous = true so the mic stays open until the user taps Stop
+    recognition.continuous     = true;
+    recognition.interimResults = false;
+    recognition.lang           = "en-US";
+    recognitionRef.current     = recognition;
 
     recognition.onresult = (e: SpeechRecognitionEvent) => {
-      const text = Array.from(e.results)
+      // Accumulate all result segments into the ref
+      const segment = Array.from(e.results)
         .map((r) => r[0].transcript)
         .join(" ")
         .trim();
-      setTranscript(text);
+      transcriptRef.current = segment;
     };
 
     recognition.onerror = (e: SpeechRecognitionErrorEvent) => {
+      setIsRecording(false);
       setVoiceState("error");
       setVoiceError(`Mic error: ${e.error}`);
     };
 
     recognition.onend = () => {
-      // onend always fires — only process if we have a transcript
-      setVoiceState((prev) => {
-        if (prev === "listening") {
-          // Transition to processing — we'll pick it up in the effect
-          return "processing";
-        }
-        return prev;
-      });
+      // Commit the ref value to state so the processing effect can read it
+      const finalText = transcriptRef.current.trim();
+      setTranscript(finalText);
+      setVoiceState(finalText ? "processing" : "error");
+      if (!finalText) setVoiceError("Nothing was heard. Please try again.");
     };
 
     recognition.start();
@@ -450,24 +507,15 @@ function BlockModal({
 
   // ── Voice: send transcript to API when we enter "processing" ──
   useEffect(() => {
-    if (voiceState !== "processing" || !transcript) {
-      if (voiceState === "processing" && !transcript) {
-        // Speech ended but nothing was captured
-        setVoiceState("error");
-        setVoiceError("Nothing was heard. Please try again.");
-      }
-      return;
-    }
+    if (voiceState !== "processing" || !transcript) return;
 
     const processTranscript = async () => {
       try {
         const res = await fetch("/api/voice-log", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            transcript,
-            activeTasks: activeTasks.map((t) => ({ id: t.id, title: t.title })),
-          }),
+          // CRITICAL: send full activeTasks array, not a mapped subset
+          body: JSON.stringify({ transcript, activeTasks }),
         });
 
         if (!res.ok) throw new Error(`API returned ${res.status}`);
@@ -477,16 +525,21 @@ function BlockModal({
           throw new Error("Invalid response from voice API.");
         }
 
-        const { taskId: parsedTaskId, timeSpent: parsedTime, valueAchieved: parsedVal, notes: parsedNotes } = data.parsedData;
+        const {
+          taskId: parsedTaskId,
+          timeSpent: parsedTime,
+          valueAchieved: parsedVal,
+          notes: parsedNotes,
+        } = data.parsedData;
 
-        // Auto-fill form fields — user reviews before submitting
-        if (parsedTaskId)  setTaskId(parsedTaskId);
-        if (parsedTime)    setTimeSpent(String(Math.min(parsedTime, remaining)));
-        if (parsedVal)     setValueAchieved(String(parsedVal));
-        if (parsedNotes)   setNotes(parsedNotes);
+        // Pre-fill form — user reviews before clicking Lock In
+        if (parsedTaskId) setTaskId(parsedTaskId);
+        if (parsedTime)   setTimeSpent(String(Math.min(Number(parsedTime), remaining)));
+        if (parsedVal)    setValueAchieved(String(parsedVal));
+        if (parsedNotes)  setNotes(parsedNotes);
 
         setVoiceState("filled");
-        setBlockType("TASK_EXECUTION"); // Ensure form mode is correct
+        setBlockType("TASK_EXECUTION");
       } catch (err) {
         console.error("Voice log processing error:", err);
         setVoiceState("error");
@@ -497,12 +550,6 @@ function BlockModal({
     processTranscript();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiceState, transcript]);
-
-  // ── Voice: stop listening manually ──
-  const stopListening = () => {
-    recognitionRef.current?.stop();
-    // onend will fire and transition to "processing"
-  };
 
   // ── Submit manual/voice-filled form ──
   const handleLog = async () => {
@@ -517,6 +564,11 @@ function BlockModal({
       }
     }
 
+    if (blockType === "DISTRACTION") {
+      if (!notes.trim()) { setError("You must confess. What distracted you?"); return; }
+      if (!timeSpent || Number(timeSpent) <= 0) { setError("How much time did you waste?"); return; }
+    }
+
     setLoading(true);
     const dateStr = new Date().toISOString().split("T")[0];
     const today   = new Date(dateStr);
@@ -527,7 +579,7 @@ function BlockModal({
       hourBlock:     hour,
       blockType,
       taskId:        blockType === "TASK_EXECUTION" ? taskId         : undefined,
-      timeSpent:     blockType === "TASK_EXECUTION" ? Number(timeSpent)   : undefined,
+      timeSpent:     (blockType === "TASK_EXECUTION" || blockType === "DISTRACTION") ? Number(timeSpent) : undefined,
       valueAchieved: blockType === "TASK_EXECUTION" ? (valueAchieved ? Number(valueAchieved) : 0) : undefined,
       notes:         notes || undefined,
     });
@@ -582,7 +634,7 @@ function BlockModal({
         </div>
 
         {/* Tabs */}
-        {taskLogs.length > 0 && (
+        {reviewableLogs.length > 0 && (
           <div className="px-5 pt-3 flex gap-1 flex-shrink-0">
             <button
               onClick={() => setTab("review")}
@@ -590,7 +642,7 @@ function BlockModal({
                 tab === "review" ? "bg-zinc-800 text-white" : "text-zinc-500 hover:text-zinc-300"
               }`}
             >
-              📋 Review ({taskLogs.length})
+              📋 Review ({reviewableLogs.length})
             </button>
             <button
               onClick={() => setTab("add")}
@@ -607,12 +659,12 @@ function BlockModal({
         <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
 
           {/* ── SECTION A: REVIEW ── */}
-          {tab === "review" && taskLogs.length > 0 && (
+          {tab === "review" && reviewableLogs.length > 0 && (
             <div className="space-y-3">
               <p className="text-xs uppercase tracking-widest text-zinc-500 font-semibold">
                 Logged in this block
               </p>
-              {taskLogs.map((log) => (
+              {reviewableLogs.map((log) => (
                 <ReviewEntry key={log.id} log={log} />
               ))}
               <button
@@ -620,7 +672,7 @@ function BlockModal({
                 disabled={remaining <= 0}
                 className="w-full py-2.5 rounded-xl border border-dashed border-zinc-700 text-sm text-zinc-500 hover:border-blue-600/60 hover:text-blue-400 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
               >
-                + Log Another Task in This Block
+                + Log Another in This Block
               </button>
             </div>
           )}
@@ -629,12 +681,12 @@ function BlockModal({
           {tab === "add" && (
             <div className="space-y-4">
 
-              {/* Block type picker (only on a fresh block) */}
-              {taskLogs.length === 0 && !nonTaskLog && (
+              {/* Block type picker — always shown when adding unless shielded block exists */}
+              {!nonTaskLog && (
                 <div>
                   <label className={labelCls}>Block Type</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(["TASK_EXECUTION", "SLEEP", "COLLEGE"] as BlockType[]).map((bt) => (
+                  <div className="grid grid-cols-2 gap-2">
+                    {(["TASK_EXECUTION", "DISTRACTION", "SLEEP", "COLLEGE"] as BlockType[]).map((bt) => (
                       <button
                         key={bt}
                         type="button"
@@ -643,13 +695,18 @@ function BlockModal({
                           blockType === bt
                             ? bt === "TASK_EXECUTION"
                               ? "border-blue-600 bg-blue-950/50 text-blue-300"
+                              : bt === "DISTRACTION"
+                              ? "border-red-600 bg-red-950/50 text-red-300 shadow-[0_0_12px_rgba(239,68,68,0.2)]"
                               : bt === "SLEEP"
                               ? "border-zinc-500 bg-zinc-800 text-zinc-300"
                               : "border-indigo-600 bg-indigo-950/50 text-indigo-300"
                             : "border-zinc-700 bg-zinc-950 text-zinc-500 hover:border-zinc-600"
                         }`}
                       >
-                        {bt === "TASK_EXECUTION" ? "⚡ Work" : bt === "SLEEP" ? "💤 Sleep" : "🏫 College"}
+                        {bt === "TASK_EXECUTION" ? "⚡ Work"
+                          : bt === "DISTRACTION" ? "⚠️ Distraction"
+                          : bt === "SLEEP"        ? "💤 Sleep"
+                          :                        "🏫 College"}
                       </button>
                     ))}
                   </div>
@@ -657,7 +714,7 @@ function BlockModal({
               )}
 
               {/* Sleep / College confirmation card */}
-              {blockType !== "TASK_EXECUTION" && (
+              {(blockType === "SLEEP" || blockType === "COLLEGE") && (
                 <div className="rounded-xl border border-zinc-700 bg-zinc-950 p-4 text-center space-y-1">
                   <p className="text-3xl">{blockType === "SLEEP" ? "💤" : "🏫"}</p>
                   <p className="text-sm font-bold text-zinc-300">
@@ -666,6 +723,91 @@ function BlockModal({
                   <p className="text-xs text-zinc-600">
                     This block is shielded — no logging quota applies.
                   </p>
+                </div>
+              )}
+
+              {/* ── DISTRACTION CONFESSION FORM ── */}
+              {blockType === "DISTRACTION" && (
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-red-800/60 bg-red-950/30 p-4 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-red-500 text-lg">⚠️</span>
+                      <p className="text-sm font-black text-red-400 uppercase tracking-wide">Accountability Required</p>
+                    </div>
+                    <p className="text-xs text-red-400/70 leading-relaxed">
+                      Logging a distraction forces self-awareness. Confess what happened so the AI can diagnose your weakness.
+                    </p>
+                  </div>
+
+                  {/* Voice Confession */}
+                  <div className={`rounded-xl border p-4 space-y-3 transition-all ${
+                    isRecording
+                      ? "border-red-700/60 bg-red-950/20 shadow-[0_0_20px_rgba(239,68,68,0.15)]"
+                      : "border-red-900/40 bg-zinc-950/60"
+                  }`}>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold uppercase tracking-widest text-red-400">Voice Confession</p>
+                        <p className="text-xs text-zinc-600 mt-0.5">Speak your confession aloud</p>
+                      </div>
+                      <MicButton isRecording={isRecording} voiceState={voiceState} onToggle={toggleRecording} />
+                    </div>
+                    <VoiceBanner voiceState={voiceState} transcript={transcript} voiceError={voiceError} />
+                    {(voiceState !== "idle" || isRecording) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          recognitionRef.current?.stop();
+                          setIsRecording(false);
+                          setVoiceState("idle");
+                          setTranscript("");
+                          transcriptRef.current = "";
+                          setVoiceError("");
+                        }}
+                        className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
+                      >
+                        Reset voice
+                      </button>
+                    )}
+                  </div>
+
+                  {error && (
+                    <div className="text-sm text-red-400 bg-red-950/30 border border-red-900/50 rounded-lg px-4 py-2.5">{error}</div>
+                  )}
+
+                  {/* Time wasted */}
+                  <div>
+                    <label className={labelCls}>Time Wasted (hrs)</label>
+                    <input
+                      type="number" min={0.05} max={1} step={0.05}
+                      value={timeSpent}
+                      onChange={(e) => setTimeSpent(e.target.value)}
+                      placeholder="e.g. 0.5"
+                      className="w-full bg-zinc-950 border border-red-900/50 rounded-lg px-4 py-2.5 text-sm text-red-300 placeholder-zinc-600 focus:outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600/30 transition-colors"
+                    />
+                  </div>
+
+                  {/* Confession notes */}
+                  <div>
+                    <label className={`${labelCls} text-red-400`}>
+                      Confession <span className="text-red-500">*</span>
+                    </label>
+                    <textarea
+                      required
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      rows={3}
+                      placeholder="What distracted you? What were you doing instead? Be specific."
+                      className={`w-full bg-zinc-950 border rounded-lg px-4 py-2.5 text-sm text-red-300 placeholder-zinc-700 focus:outline-none transition-colors resize-none ${
+                        voiceState === "filled" && notes
+                          ? "border-green-700/60 bg-green-950/10"
+                          : "border-red-900/50 focus:border-red-600 focus:ring-1 focus:ring-red-600/30"
+                      }`}
+                    />
+                    {!notes.trim() && (
+                      <p className="mt-1 text-xs text-red-600">Confession is mandatory — no excuses.</p>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -679,20 +821,24 @@ function BlockModal({
                   ) : (
                     <>
                       {/* ── VOICE LOG SECTION ── */}
-                      <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div>
+                      <div className={`rounded-xl border p-4 space-y-3 transition-all ${
+                        isRecording
+                          ? "border-red-700/60 bg-red-950/20 shadow-[0_0_20px_rgba(239,68,68,0.15)]"
+                          : "border-zinc-800 bg-zinc-950/60"
+                      }`}>
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
                             <p className="text-xs font-bold uppercase tracking-widest text-zinc-400">
                               Voice Log
                             </p>
                             <p className="text-xs text-zinc-600 mt-0.5">
-                              Speak your session — AI fills the form
+                              AI extracts task, time &amp; notes
                             </p>
                           </div>
                           <MicButton
+                            isRecording={isRecording}
                             voiceState={voiceState}
-                            onStart={startListening}
-                            onStop={stopListening}
+                            onToggle={toggleRecording}
                           />
                         </div>
 
@@ -702,12 +848,15 @@ function BlockModal({
                           voiceError={voiceError}
                         />
 
-                        {voiceState !== "idle" && (
+                        {(voiceState !== "idle" || isRecording) && (
                           <button
                             type="button"
                             onClick={() => {
+                              recognitionRef.current?.stop();
+                              setIsRecording(false);
                               setVoiceState("idle");
                               setTranscript("");
+                              transcriptRef.current = "";
                               setVoiceError("");
                             }}
                             className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
@@ -824,12 +973,21 @@ function BlockModal({
               onClick={handleLog}
               disabled={loading || (blockType === "TASK_EXECUTION" && remaining <= 0)}
               className={`flex-1 py-2.5 rounded-xl text-white text-sm font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-lg ${
-                voiceState === "filled"
+                blockType === "DISTRACTION"
+                  ? "bg-red-700 hover:bg-red-600 shadow-red-900/30"
+                  : voiceState === "filled"
                   ? "bg-green-700 hover:bg-green-600 shadow-green-900/30"
                   : "bg-blue-600 hover:bg-blue-500 shadow-blue-900/30"
               }`}
             >
-              {loading ? "Locking in…" : voiceState === "filled" ? "Lock In 🎙️" : "Lock In ⚡"}
+              {loading
+                ? "Logging…"
+                : blockType === "DISTRACTION"
+                ? "Confess ⚠️"
+                : voiceState === "filled"
+                ? "Lock In 🎙️"
+                : "Lock In ⚡"
+              }
             </button>
           </div>
         )}
@@ -840,17 +998,19 @@ function BlockModal({
 
 // ─── Day Summary Bar ───────────────────────────────────────────────────────────
 function DaySummaryBar({ logs }: { logs: DailyLog[] }) {
-  const taskLogs  = logs.filter((l) => l.blockType === "TASK_EXECUTION");
-  const totalTime = taskLogs.reduce((s, l) => s + (l.timeSpent ?? 0), 0);
-  const deepTime  = taskLogs
+  const taskLogs       = logs.filter((l) => l.blockType === "TASK_EXECUTION");
+  const distractions   = logs.filter((l) => l.blockType === "DISTRACTION");
+  const totalTime      = taskLogs.reduce((s, l) => s + (l.timeSpent ?? 0), 0);
+  const deepTime       = taskLogs
     .filter((l) => l.task?.effortType === "DEEP_WORK")
     .reduce((s, l) => s + (l.timeSpent ?? 0), 0);
+  const distractTime   = distractions.reduce((s, l) => s + (l.timeSpent ?? 0), 0);
 
   const stats = [
-    { label: "Total Work", value: fmtHrs(totalTime), color: "text-blue-400" },
-    { label: "Deep Work",  value: fmtHrs(deepTime),  color: "text-indigo-400" },
-    { label: "Daily Cap",  value: "12h",              color: "text-zinc-600" },
-    { label: "Sessions",   value: String(taskLogs.length), color: "text-green-400" },
+    { label: "Total Work",    value: fmtHrs(totalTime),            color: "text-blue-400" },
+    { label: "Deep Work",     value: fmtHrs(deepTime),             color: "text-indigo-400" },
+    { label: "Sessions",      value: String(taskLogs.length),      color: "text-green-400" },
+    { label: "Distracted",    value: distractTime > 0 ? fmtHrs(distractTime) : "0m", color: distractTime > 0 ? "text-red-400" : "text-zinc-600" },
   ];
 
   return (
@@ -866,20 +1026,41 @@ function DaySummaryBar({ logs }: { logs: DailyLog[] }) {
 }
 
 // ─── Main Component ────────────────────────────────────────────────────────────
-export default function DailyGrid({ userId, activeTasks, todaysLogs }: DailyGridProps) {
+export default function DailyGrid({
+  userId,
+  activeTasks,
+  recentLogs,
+  logicalToday,
+  logicalYesterday,
+}: DailyGridProps) {
   const [selectedHour, setSelectedHour] = useState<number | null>(null);
+  // viewDate defaults to logicalToday
+  const [viewDate, setViewDate]         = useState<Date>(logicalToday);
+
+  const isViewingToday = viewDate.toISOString().split("T")[0] === logicalToday.toISOString().split("T")[0];
+
+  // Filter recentLogs to only those matching the active viewDate
+  const viewDateStr = viewDate.toISOString().split("T")[0];
+  const viewLogs = useMemo(
+    () => recentLogs.filter((l) => {
+      // DailyLog.date comes as a Date object from Prisma
+      const logDateStr = new Date(l.date as unknown as string).toISOString().split("T")[0];
+      return logDateStr === viewDateStr;
+    }),
+    [recentLogs, viewDateStr]
+  );
 
   const logsByHour = useMemo(() => {
     const map = new Map<number, DailyLog[]>();
     for (let h = 0; h < 24; h++) map.set(h, []);
-    for (const log of todaysLogs) {
+    for (const log of viewLogs) {
       map.get(log.hourBlock)?.push(log);
     }
     return map;
-  }, [todaysLogs]);
+  }, [viewLogs]);
 
   const hours = Array.from({ length: 24 }, (_, i) => i);
-  const today = new Date().toLocaleDateString("en-GB", {
+  const displayDate = viewDate.toLocaleDateString("en-GB", {
     weekday: "long",
     day: "numeric",
     month: "long",
@@ -887,11 +1068,37 @@ export default function DailyGrid({ userId, activeTasks, todaysLogs }: DailyGrid
 
   return (
     <div className="w-full max-w-5xl mx-auto px-6 py-8 bg-zinc-950 min-h-screen text-zinc-100 font-sans">
-      <div className="mb-8 border-b border-zinc-800 pb-6 flex items-end justify-between">
+      {/* Header */}
+      <div className="mb-6 border-b border-zinc-800 pb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black tracking-tight text-white">Daily Execution</h1>
-          <p className="text-zinc-500 mt-1 text-sm">{today}</p>
+          <p className="text-zinc-500 mt-1 text-sm">{displayDate}</p>
         </div>
+
+        {/* Today / Yesterday toggle */}
+        <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded-xl p-1">
+          <button
+            onClick={() => { setViewDate(logicalToday); setSelectedHour(null); }}
+            className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${
+              isViewingToday
+                ? "bg-blue-600 text-white shadow-lg shadow-blue-900/30"
+                : "text-zinc-500 hover:text-zinc-300"
+            }`}
+          >
+            Today
+          </button>
+          <button
+            onClick={() => { setViewDate(logicalYesterday); setSelectedHour(null); }}
+            className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${
+              !isViewingToday
+                ? "bg-zinc-700 text-white"
+                : "text-zinc-500 hover:text-zinc-300"
+            }`}
+          >
+            Yesterday
+          </button>
+        </div>
+
         <div className="text-right text-xs text-zinc-600 font-mono leading-relaxed">
           <p>Deep Work cap: <span className="text-blue-500">4h</span></p>
           <p>Shallow cap: <span className="text-zinc-400">2h</span></p>
@@ -899,7 +1106,17 @@ export default function DailyGrid({ userId, activeTasks, todaysLogs }: DailyGrid
         </div>
       </div>
 
-      <DaySummaryBar logs={todaysLogs} />
+      {/* Temporal shift notice */}
+      {!isViewingToday && (
+        <div className="mb-6 flex items-center gap-2.5 text-xs text-zinc-500 bg-zinc-900/60 border border-zinc-800 rounded-xl px-4 py-3">
+          <span className="text-base">🕐</span>
+          <span>
+            Viewing <span className="font-bold text-zinc-300">Yesterday</span> — the 3-hour midnight extension means blocks logged before 03:00 today count as yesterday.
+          </span>
+        </div>
+      )}
+
+      <DaySummaryBar logs={viewLogs} />
 
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
         {hours.map((hour) => (
@@ -912,10 +1129,15 @@ export default function DailyGrid({ userId, activeTasks, todaysLogs }: DailyGrid
         ))}
       </div>
 
+      {/* Legend */}
       <div className="mt-6 flex flex-wrap items-center gap-4 text-xs text-zinc-600">
         <span className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-sm bg-blue-950/60 border border-blue-700/60 inline-block" />
           Work logged
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-sm bg-red-950/50 border border-red-700/60 inline-block" />
+          Distraction
         </span>
         <span className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-sm bg-zinc-800/50 border border-zinc-700/40 opacity-60 inline-block" />
