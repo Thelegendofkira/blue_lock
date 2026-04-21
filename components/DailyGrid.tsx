@@ -69,8 +69,8 @@ function fmtHrs(h: number | null | undefined) {
 }
 
 const blockTypeLabel: Record<string, string> = {
-  SLEEP:       "💤 Sleep",
-  COLLEGE:     "🏫 College",
+  SLEEP: "💤 Sleep",
+  COLLEGE: "🏫 College",
   DISTRACTION: "⚠️ Distraction",
 };
 
@@ -122,9 +122,8 @@ function DeleteLogButton({ logId }: { logId: string }) {
 function ReviewEntry({ log }: { log: DailyLog }) {
   const isDistraction = log.blockType === "DISTRACTION";
   return (
-    <div className={`rounded-xl border p-4 space-y-2.5 ${
-      isDistraction ? "border-red-900/60 bg-red-950/20" : "border-zinc-800 bg-zinc-950"
-    }`}>
+    <div className={`rounded-xl border p-4 space-y-2.5 ${isDistraction ? "border-red-900/60 bg-red-950/20" : "border-zinc-800 bg-zinc-950"
+      }`}>
       <div className="flex items-start justify-between gap-3">
         <p className="text-sm font-bold leading-tight">
           {isDistraction
@@ -138,8 +137,8 @@ function ReviewEntry({ log }: { log: DailyLog }) {
       <div className="flex flex-wrap items-center gap-3 text-xs font-mono">
         <span className="flex items-center gap-1.5 text-zinc-300">
           <svg className="w-3 h-3 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <circle cx="12" cy="12" r="10" strokeWidth="2"/>
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6l4 2"/>
+            <circle cx="12" cy="12" r="10" strokeWidth="2" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6l4 2" />
           </svg>
           {fmtHrs(log.timeSpent)}
           {isDistraction && <span className="text-red-400 font-sans font-bold ml-1">wasted</span>}
@@ -149,7 +148,7 @@ function ReviewEntry({ log }: { log: DailyLog }) {
           <span className="flex items-center gap-1.5 text-zinc-300">
             <svg className="w-3 h-3 text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10"/>
+                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10" />
             </svg>
             <span className="text-green-400 font-bold">+{log.valueAchieved}</span>
             {log.task?.quantifierUnit && (
@@ -160,9 +159,8 @@ function ReviewEntry({ log }: { log: DailyLog }) {
       </div>
 
       {log.notes && (
-        <p className={`text-xs italic border-l-2 pl-2.5 leading-relaxed ${
-          isDistraction ? "text-red-400/80 border-red-700" : "text-zinc-500 border-zinc-700"
-        }`}>
+        <p className={`text-xs italic border-l-2 pl-2.5 leading-relaxed ${isDistraction ? "text-red-400/80 border-red-700" : "text-zinc-500 border-zinc-700"
+          }`}>
           {isDistraction && <span className="font-bold not-italic">Confession: </span>}
           {log.notes}
         </p>
@@ -175,10 +173,14 @@ function ReviewEntry({ log }: { log: DailyLog }) {
 function BlockCell({
   hour,
   logs,
+  isFuture,
+  isNoAction,
   onClick,
 }: {
   hour: number;
   logs: DailyLog[];
+  isFuture: boolean;
+  isNoAction: boolean;
   onClick: () => void;
 }) {
   const taskLogs      = logs.filter((l) => l.blockType === "TASK_EXECUTION");
@@ -187,6 +189,39 @@ function BlockCell({
   const totalTime     = taskLogs.reduce((s, l) => s + (l.timeSpent ?? 0), 0);
   const isNow         = new Date().getHours() === hour;
 
+  // ── Future block: dimmed and unclickable ─────────────────────────────────────
+  if (isFuture) {
+    return (
+      <div className="relative h-[6.5rem] p-3 rounded-xl border border-zinc-800/40 bg-zinc-950/30 flex flex-col justify-between opacity-35 cursor-not-allowed select-none">
+        <span className="text-xs font-bold font-mono text-zinc-700">
+          {hour.toString().padStart(2, "0")}:00
+        </span>
+      </div>
+    );
+  }
+
+  // ── No-action block: expired back-log window — fully sealed ────────────────
+  if (isNoAction) {
+    return (
+      <div className="relative h-[6.5rem] p-3 rounded-xl border border-red-900/40 bg-red-950/15 flex flex-col justify-between cursor-not-allowed select-none opacity-70">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold font-mono text-red-800">
+            {hour.toString().padStart(2, "0")}:00
+          </span>
+          {/* Lock icon */}
+          <svg className="w-3 h-3 text-red-900" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M17 11V7A5 5 0 0 0 7 7v4H5a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1h-2zm-5 6.732V16a1 1 0 1 1 2 0v1.732A2 2 0 1 1 12 17.732zM15 11H9V7a3 3 0 0 1 6 0v4z"/>
+          </svg>
+        </div>
+        <div className="space-y-0.5">
+          <p className="text-xs font-bold text-red-700">✘ No Action</p>
+          <p className="text-xs text-red-900 font-mono">Window closed</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Normal logged / empty state ──────────────────────────────────────────────
   let cellCls = "bg-zinc-900/70 border-zinc-800 hover:border-blue-500/60 hover:bg-zinc-800/80 cursor-pointer";
   let content: React.ReactNode = null;
 
@@ -231,7 +266,7 @@ function BlockCell({
     >
       <div className="flex items-center justify-between">
         <span className={`text-xs font-bold font-mono ${isNow ? "text-blue-400" : "text-zinc-600"}`}>
-          {hour.toString().padStart(2, "00")}:00
+          {hour.toString().padStart(2, "0")}:00
         </span>
         {isNow && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />}
       </div>
@@ -266,31 +301,31 @@ function MicButton({
   onToggle: () => void;
 }) {
   const isProcessing = voiceState === "processing";
-  const isFilled     = voiceState === "filled";
-  const isDisabled   = isProcessing;
+  const isFilled = voiceState === "filled";
+  const isDisabled = isProcessing;
 
   // Visual variants
   const bg = isRecording
     ? "bg-red-600 hover:bg-red-500 animate-pulse"
     : isFilled
-    ? "bg-green-700 hover:bg-green-600"
-    : voiceState === "error"
-    ? "bg-zinc-700 hover:bg-zinc-600"
-    : "bg-blue-700 hover:bg-blue-600";
+      ? "bg-green-700 hover:bg-green-600"
+      : voiceState === "error"
+        ? "bg-zinc-700 hover:bg-zinc-600"
+        : "bg-blue-700 hover:bg-blue-600";
 
   const ringGlow = isRecording
     ? "shadow-[0_0_0_4px_rgba(239,68,68,0.3),0_0_24px_rgba(239,68,68,0.6)]"
     : isFilled
-    ? "shadow-[0_0_0_3px_rgba(74,222,128,0.3),0_0_16px_rgba(74,222,128,0.3)]"
-    : "";
+      ? "shadow-[0_0_0_3px_rgba(74,222,128,0.3),0_0_16px_rgba(74,222,128,0.3)]"
+      : "";
 
   const label = isRecording
     ? "Recording… Tap to Stop"
     : isProcessing
-    ? "Processing…"
-    : isFilled
-    ? "Filled — edit or lock in"
-    : "Tap to Voice Log";
+      ? "Processing…"
+      : isFilled
+        ? "Filled — edit or lock in"
+        : "Tap to Voice Log";
 
   return (
     <div className="flex items-center gap-3">
@@ -321,16 +356,15 @@ function MicButton({
         ) : (
           /* Microphone icon */
           <svg className="w-5 h-5 text-white relative z-10" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm0 2a2 2 0 0 0-2 2v6a2 2 0 0 0 4 0V5a2 2 0 0 0-2-2z"/>
-            <path d="M19 11a1 1 0 0 1 1 1 8 8 0 0 1-7 7.938V22h2a1 1 0 0 1 0 2H9a1 1 0 0 1 0-2h2v-2.062A8 8 0 0 1 4 12a1 1 0 0 1 2 0 6 6 0 0 0 12 0 1 1 0 0 1 1-1z"/>
+            <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm0 2a2 2 0 0 0-2 2v6a2 2 0 0 0 4 0V5a2 2 0 0 0-2-2z" />
+            <path d="M19 11a1 1 0 0 1 1 1 8 8 0 0 1-7 7.938V22h2a1 1 0 0 1 0 2H9a1 1 0 0 1 0-2h2v-2.062A8 8 0 0 1 4 12a1 1 0 0 1 2 0 6 6 0 0 0 12 0 1 1 0 0 1 1-1z" />
           </svg>
         )}
       </button>
 
       {/* Inline label */}
-      <span className={`text-xs font-bold transition-colors ${
-        isRecording ? "text-red-400" : isProcessing ? "text-blue-400" : isFilled ? "text-green-400" : "text-zinc-500"
-      }`}>
+      <span className={`text-xs font-bold transition-colors ${isRecording ? "text-red-400" : isProcessing ? "text-blue-400" : isFilled ? "text-green-400" : "text-zinc-500"
+        }`}>
         {label}
       </span>
     </div>
@@ -410,33 +444,33 @@ function BlockModal({
   userId: string;
   onClose: () => void;
 }) {
-  const taskLogs       = logsForHour.filter((l) => l.blockType === "TASK_EXECUTION");
-  const distractionLog = logsForHour.find((l)  => l.blockType === "DISTRACTION");
-  const nonTaskLog     = logsForHour.find((l)  => l.blockType !== "TASK_EXECUTION" && l.blockType !== "DISTRACTION");
+  const taskLogs = logsForHour.filter((l) => l.blockType === "TASK_EXECUTION");
+  const distractionLog = logsForHour.find((l) => l.blockType === "DISTRACTION");
+  const nonTaskLog = logsForHour.find((l) => l.blockType !== "TASK_EXECUTION" && l.blockType !== "DISTRACTION");
   // Reviewable logs are task + distraction entries (not sleep/college)
   const reviewableLogs = logsForHour.filter((l) => l.blockType === "TASK_EXECUTION" || l.blockType === "DISTRACTION");
 
   const [tab, setTab] = useState<"review" | "add">(reviewableLogs.length > 0 ? "review" : "add");
 
   // ── Form state ──
-  const [blockType, setBlockType]         = useState<BlockType>(nonTaskLog ? nonTaskLog.blockType : "TASK_EXECUTION");
-  const [taskId, setTaskId]               = useState("");
-  const [timeSpent, setTimeSpent]         = useState("");
+  const [blockType, setBlockType] = useState<BlockType>(nonTaskLog ? nonTaskLog.blockType : "TASK_EXECUTION");
+  const [taskId, setTaskId] = useState("");
+  const [timeSpent, setTimeSpent] = useState("");
   const [valueAchieved, setValueAchieved] = useState("");
-  const [notes, setNotes]                 = useState("");
-  const [loading, setLoading]             = useState(false);
-  const [error, setError]                 = useState("");
+  const [notes, setNotes] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   // ── Voice state ──
   const [isRecording, setIsRecording] = useState(false);
-  const [voiceState, setVoiceState]   = useState<VoiceState>("idle");
-  const [transcript, setTranscript]   = useState("");
-  const [voiceError, setVoiceError]   = useState("");
-  const recognitionRef                = useRef<ISpeechRecognition | null>(null);
+  const [voiceState, setVoiceState] = useState<VoiceState>("idle");
+  const [transcript, setTranscript] = useState("");
+  const [voiceError, setVoiceError] = useState("");
+  const recognitionRef = useRef<ISpeechRecognition | null>(null);
   // Accumulates interim results across multiple `onresult` events
-  const transcriptRef                 = useRef("");
+  const transcriptRef = useRef("");
 
-  const usedTime  = taskLogs.reduce((s, l) => s + (l.timeSpent ?? 0), 0);
+  const usedTime = taskLogs.reduce((s, l) => s + (l.timeSpent ?? 0), 0);
   const remaining = Math.max(0, parseFloat((1.0 - usedTime).toFixed(2)));
   const selectedTask = activeTasks.find((t) => t.id === taskId);
 
@@ -474,10 +508,10 @@ function BlockModal({
 
     const recognition = new SpeechRecognitionImpl();
     // continuous = true so the mic stays open until the user taps Stop
-    recognition.continuous     = true;
+    recognition.continuous = true;
     recognition.interimResults = false;
-    recognition.lang           = "en-US";
-    recognitionRef.current     = recognition;
+    recognition.lang = "en-US";
+    recognitionRef.current = recognition;
 
     recognition.onresult = (e: SpeechRecognitionEvent) => {
       // Accumulate all result segments into the ref
@@ -534,9 +568,9 @@ function BlockModal({
 
         // Pre-fill form — user reviews before clicking Lock In
         if (parsedTaskId) setTaskId(parsedTaskId);
-        if (parsedTime)   setTimeSpent(String(Math.min(Number(parsedTime), remaining)));
-        if (parsedVal)    setValueAchieved(String(parsedVal));
-        if (parsedNotes)  setNotes(parsedNotes);
+        if (parsedTime) setTimeSpent(String(Math.min(Number(parsedTime), remaining)));
+        if (parsedVal) setValueAchieved(String(parsedVal));
+        if (parsedNotes) setNotes(parsedNotes);
 
         setVoiceState("filled");
         setBlockType("TASK_EXECUTION");
@@ -548,7 +582,7 @@ function BlockModal({
     };
 
     processTranscript();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiceState, transcript]);
 
   // ── Submit manual/voice-filled form ──
@@ -556,7 +590,7 @@ function BlockModal({
     setError("");
 
     if (blockType === "TASK_EXECUTION") {
-      if (!taskId)   { setError("Please select a task."); return; }
+      if (!taskId) { setError("Please select a task."); return; }
       if (!timeSpent || Number(timeSpent) <= 0) { setError("Time spent must be greater than 0."); return; }
       if (Number(timeSpent) > remaining + 0.001) {
         setError(`Only ${fmtHrs(remaining)} of budget remains in this block.`);
@@ -571,17 +605,17 @@ function BlockModal({
 
     setLoading(true);
     const dateStr = new Date().toISOString().split("T")[0];
-    const today   = new Date(dateStr);
+    const today = new Date(dateStr);
 
     const res = await logDailyBlock({
       userId,
-      date:          today,
-      hourBlock:     hour,
+      date: today,
+      hourBlock: hour,
       blockType,
-      taskId:        blockType === "TASK_EXECUTION" ? taskId         : undefined,
-      timeSpent:     (blockType === "TASK_EXECUTION" || blockType === "DISTRACTION") ? Number(timeSpent) : undefined,
+      taskId: blockType === "TASK_EXECUTION" ? taskId : undefined,
+      timeSpent: (blockType === "TASK_EXECUTION" || blockType === "DISTRACTION") ? Number(timeSpent) : undefined,
       valueAchieved: blockType === "TASK_EXECUTION" ? (valueAchieved ? Number(valueAchieved) : 0) : undefined,
-      notes:         notes || undefined,
+      notes: notes || undefined,
     });
 
     setLoading(false);
@@ -638,17 +672,15 @@ function BlockModal({
           <div className="px-5 pt-3 flex gap-1 flex-shrink-0">
             <button
               onClick={() => setTab("review")}
-              className={`flex-1 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${
-                tab === "review" ? "bg-zinc-800 text-white" : "text-zinc-500 hover:text-zinc-300"
-              }`}
+              className={`flex-1 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${tab === "review" ? "bg-zinc-800 text-white" : "text-zinc-500 hover:text-zinc-300"
+                }`}
             >
               📋 Review ({reviewableLogs.length})
             </button>
             <button
               onClick={() => setTab("add")}
-              className={`flex-1 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${
-                tab === "add" ? "bg-zinc-800 text-white" : "text-zinc-500 hover:text-zinc-300"
-              }`}
+              className={`flex-1 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${tab === "add" ? "bg-zinc-800 text-white" : "text-zinc-500 hover:text-zinc-300"
+                }`}
             >
               + Add New
             </button>
@@ -691,22 +723,21 @@ function BlockModal({
                         key={bt}
                         type="button"
                         onClick={() => setBlockType(bt)}
-                        className={`py-2.5 rounded-xl text-xs font-bold border transition-all ${
-                          blockType === bt
+                        className={`py-2.5 rounded-xl text-xs font-bold border transition-all ${blockType === bt
                             ? bt === "TASK_EXECUTION"
                               ? "border-blue-600 bg-blue-950/50 text-blue-300"
                               : bt === "DISTRACTION"
-                              ? "border-red-600 bg-red-950/50 text-red-300 shadow-[0_0_12px_rgba(239,68,68,0.2)]"
-                              : bt === "SLEEP"
-                              ? "border-zinc-500 bg-zinc-800 text-zinc-300"
-                              : "border-indigo-600 bg-indigo-950/50 text-indigo-300"
+                                ? "border-red-600 bg-red-950/50 text-red-300 shadow-[0_0_12px_rgba(239,68,68,0.2)]"
+                                : bt === "SLEEP"
+                                  ? "border-zinc-500 bg-zinc-800 text-zinc-300"
+                                  : "border-indigo-600 bg-indigo-950/50 text-indigo-300"
                             : "border-zinc-700 bg-zinc-950 text-zinc-500 hover:border-zinc-600"
-                        }`}
+                          }`}
                       >
                         {bt === "TASK_EXECUTION" ? "⚡ Work"
                           : bt === "DISTRACTION" ? "⚠️ Distraction"
-                          : bt === "SLEEP"        ? "💤 Sleep"
-                          :                        "🏫 College"}
+                            : bt === "SLEEP" ? "💤 Sleep"
+                              : "🏫 College"}
                       </button>
                     ))}
                   </div>
@@ -740,11 +771,10 @@ function BlockModal({
                   </div>
 
                   {/* Voice Confession */}
-                  <div className={`rounded-xl border p-4 space-y-3 transition-all ${
-                    isRecording
+                  <div className={`rounded-xl border p-4 space-y-3 transition-all ${isRecording
                       ? "border-red-700/60 bg-red-950/20 shadow-[0_0_20px_rgba(239,68,68,0.15)]"
                       : "border-red-900/40 bg-zinc-950/60"
-                  }`}>
+                    }`}>
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-xs font-bold uppercase tracking-widest text-red-400">Voice Confession</p>
@@ -798,11 +828,10 @@ function BlockModal({
                       onChange={(e) => setNotes(e.target.value)}
                       rows={3}
                       placeholder="What distracted you? What were you doing instead? Be specific."
-                      className={`w-full bg-zinc-950 border rounded-lg px-4 py-2.5 text-sm text-red-300 placeholder-zinc-700 focus:outline-none transition-colors resize-none ${
-                        voiceState === "filled" && notes
+                      className={`w-full bg-zinc-950 border rounded-lg px-4 py-2.5 text-sm text-red-300 placeholder-zinc-700 focus:outline-none transition-colors resize-none ${voiceState === "filled" && notes
                           ? "border-green-700/60 bg-green-950/10"
                           : "border-red-900/50 focus:border-red-600 focus:ring-1 focus:ring-red-600/30"
-                      }`}
+                        }`}
                     />
                     {!notes.trim() && (
                       <p className="mt-1 text-xs text-red-600">Confession is mandatory — no excuses.</p>
@@ -821,11 +850,10 @@ function BlockModal({
                   ) : (
                     <>
                       {/* ── VOICE LOG SECTION ── */}
-                      <div className={`rounded-xl border p-4 space-y-3 transition-all ${
-                        isRecording
+                      <div className={`rounded-xl border p-4 space-y-3 transition-all ${isRecording
                           ? "border-red-700/60 bg-red-950/20 shadow-[0_0_20px_rgba(239,68,68,0.15)]"
                           : "border-zinc-800 bg-zinc-950/60"
-                      }`}>
+                        }`}>
                         <div className="flex items-center justify-between gap-3">
                           <div className="min-w-0">
                             <p className="text-xs font-bold uppercase tracking-widest text-zinc-400">
@@ -972,21 +1000,20 @@ function BlockModal({
             <button
               onClick={handleLog}
               disabled={loading || (blockType === "TASK_EXECUTION" && remaining <= 0)}
-              className={`flex-1 py-2.5 rounded-xl text-white text-sm font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-lg ${
-                blockType === "DISTRACTION"
+              className={`flex-1 py-2.5 rounded-xl text-white text-sm font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-lg ${blockType === "DISTRACTION"
                   ? "bg-red-700 hover:bg-red-600 shadow-red-900/30"
                   : voiceState === "filled"
-                  ? "bg-green-700 hover:bg-green-600 shadow-green-900/30"
-                  : "bg-blue-600 hover:bg-blue-500 shadow-blue-900/30"
-              }`}
+                    ? "bg-green-700 hover:bg-green-600 shadow-green-900/30"
+                    : "bg-blue-600 hover:bg-blue-500 shadow-blue-900/30"
+                }`}
             >
               {loading
                 ? "Logging…"
                 : blockType === "DISTRACTION"
-                ? "Confess ⚠️"
-                : voiceState === "filled"
-                ? "Lock In 🎙️"
-                : "Lock In ⚡"
+                  ? "Confess ⚠️"
+                  : voiceState === "filled"
+                    ? "Lock In 🎙️"
+                    : "Lock In ⚡"
               }
             </button>
           </div>
@@ -998,19 +1025,19 @@ function BlockModal({
 
 // ─── Day Summary Bar ───────────────────────────────────────────────────────────
 function DaySummaryBar({ logs }: { logs: DailyLog[] }) {
-  const taskLogs       = logs.filter((l) => l.blockType === "TASK_EXECUTION");
-  const distractions   = logs.filter((l) => l.blockType === "DISTRACTION");
-  const totalTime      = taskLogs.reduce((s, l) => s + (l.timeSpent ?? 0), 0);
-  const deepTime       = taskLogs
+  const taskLogs = logs.filter((l) => l.blockType === "TASK_EXECUTION");
+  const distractions = logs.filter((l) => l.blockType === "DISTRACTION");
+  const totalTime = taskLogs.reduce((s, l) => s + (l.timeSpent ?? 0), 0);
+  const deepTime = taskLogs
     .filter((l) => l.task?.effortType === "DEEP_WORK")
     .reduce((s, l) => s + (l.timeSpent ?? 0), 0);
-  const distractTime   = distractions.reduce((s, l) => s + (l.timeSpent ?? 0), 0);
+  const distractTime = distractions.reduce((s, l) => s + (l.timeSpent ?? 0), 0);
 
   const stats = [
-    { label: "Total Work",    value: fmtHrs(totalTime),            color: "text-blue-400" },
-    { label: "Deep Work",     value: fmtHrs(deepTime),             color: "text-indigo-400" },
-    { label: "Sessions",      value: String(taskLogs.length),      color: "text-green-400" },
-    { label: "Distracted",    value: distractTime > 0 ? fmtHrs(distractTime) : "0m", color: distractTime > 0 ? "text-red-400" : "text-zinc-600" },
+    { label: "Total Work", value: fmtHrs(totalTime), color: "text-blue-400" },
+    { label: "Deep Work", value: fmtHrs(deepTime), color: "text-indigo-400" },
+    { label: "Sessions", value: String(taskLogs.length), color: "text-green-400" },
+    { label: "Distracted", value: distractTime > 0 ? fmtHrs(distractTime) : "0m", color: distractTime > 0 ? "text-red-400" : "text-zinc-600" },
   ];
 
   return (
@@ -1035,18 +1062,24 @@ export default function DailyGrid({
 }: DailyGridProps) {
   const [selectedHour, setSelectedHour] = useState<number | null>(null);
   // viewDate defaults to logicalToday
-  const [viewDate, setViewDate]         = useState<Date>(logicalToday);
+  const [viewDate, setViewDate] = useState<Date>(logicalToday);
 
-  const isViewingToday = viewDate.toISOString().split("T")[0] === logicalToday.toISOString().split("T")[0];
+  // ── Date comparison helper (local-time YYYY-MM-DD, not UTC) ─────────────────
+  const localDateStr = (d: Date) => {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  };
 
-  // Filter recentLogs to only those matching the active viewDate
-  const viewDateStr = viewDate.toISOString().split("T")[0];
+  const isViewingToday = localDateStr(viewDate) === localDateStr(logicalToday);
+
+  // Filter recentLogs to only those matching the active viewDate (local-time dates)
+  const viewDateStr = localDateStr(viewDate);
   const viewLogs = useMemo(
     () => recentLogs.filter((l) => {
-      // DailyLog.date comes as a Date object from Prisma
-      const logDateStr = new Date(l.date as unknown as string).toISOString().split("T")[0];
-      return logDateStr === viewDateStr;
+      const d = new Date(l.date as unknown as string);
+      return localDateStr(d) === viewDateStr;
     }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [recentLogs, viewDateStr]
   );
 
@@ -1059,7 +1092,18 @@ export default function DailyGrid({
     return map;
   }, [viewLogs]);
 
-  const hours = Array.from({ length: 24 }, (_, i) => i);
+  // ── Ordered hours: logical day starts at 03:00 ──────────────────────────────
+  //   orderedHours = [3, 4, …, 23, 0, 1, 2]
+  const orderedHours = useMemo(() => [
+    ...Array.from({ length: 21 }, (_, i) => i + 3),  // 3 → 23
+    0, 1, 2,                                           // next day 0 → 2
+  ], []);
+
+  // Current wall-clock hour
+  const currentHour = new Date().getHours();
+  // Its position inside orderedHours (used for future-block detection)
+  const currentHourIndex = orderedHours.indexOf(currentHour);
+
   const displayDate = viewDate.toLocaleDateString("en-GB", {
     weekday: "long",
     day: "numeric",
@@ -1079,21 +1123,19 @@ export default function DailyGrid({
         <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded-xl p-1">
           <button
             onClick={() => { setViewDate(logicalToday); setSelectedHour(null); }}
-            className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${
-              isViewingToday
+            className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${isViewingToday
                 ? "bg-blue-600 text-white shadow-lg shadow-blue-900/30"
                 : "text-zinc-500 hover:text-zinc-300"
-            }`}
+              }`}
           >
             Today
           </button>
           <button
             onClick={() => { setViewDate(logicalYesterday); setSelectedHour(null); }}
-            className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${
-              !isViewingToday
+            className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${!isViewingToday
                 ? "bg-zinc-700 text-white"
                 : "text-zinc-500 hover:text-zinc-300"
-            }`}
+              }`}
           >
             Yesterday
           </button>
@@ -1119,14 +1161,34 @@ export default function DailyGrid({
       <DaySummaryBar logs={viewLogs} />
 
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-        {hours.map((hour) => (
-          <BlockCell
-            key={hour}
-            hour={hour}
-            logs={logsByHour.get(hour) ?? []}
-            onClick={() => setSelectedHour(hour)}
-          />
-        ))}
+        {orderedHours.map((hour, idx) => {
+          const logs = logsByHour.get(hour) ?? [];
+          const hasLogs = logs.length > 0;
+
+          // Future blocks: only lock when viewing today
+          const isFuture = isViewingToday && idx > currentHourIndex;
+
+          // No-action blocks: only when viewing today, past block (not future), empty,
+          // and at least 4 hours have elapsed since the block ENDED (i.e. hoursPassed >= 4).
+          // hoursPassed = distance in orderedHours between this block and the current block.
+          // Example: current hour index 22 (01:00), hour index 20 (23:00) → distance = 2 → NOT locked.
+          // Example: current hour index 22 (01:00), hour index 18 (21:00) → distance = 4 → locked.
+          const hoursPassed = isViewingToday ? currentHourIndex - idx : 999;
+          const isNoAction  = !isFuture && !hasLogs && hoursPassed >= 4;
+
+          return (
+            <BlockCell
+              key={hour}
+              hour={hour}
+              logs={logs}
+              isFuture={isFuture}
+              isNoAction={isNoAction}
+              onClick={() => {
+                if (!isFuture) setSelectedHour(hour);
+              }}
+            />
+          );
+        })}
       </div>
 
       {/* Legend */}
@@ -1140,8 +1202,12 @@ export default function DailyGrid({
           Distraction
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-sm bg-zinc-800/50 border border-zinc-700/40 opacity-60 inline-block" />
-          Exempt (Sleep / College)
+          <span className="w-2.5 h-2.5 rounded-sm bg-zinc-800/30 border border-zinc-800/50 opacity-40 inline-block" />
+          Future (locked)
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-sm bg-red-950/30 border border-red-900/50 inline-block" />
+          No Action (4h+ ago)
         </span>
         <span className="flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse inline-block" />
