@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import twilio from "twilio";
 import { GoogleGenAI } from "@google/genai";
+export const maxDuration = 60;
 
 const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 const ai = new GoogleGenAI({});
