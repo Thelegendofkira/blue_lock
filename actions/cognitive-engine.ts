@@ -82,7 +82,7 @@ export async function logDailyBlock(data: {
         const t = log.timeSpent ?? 0;
         totalWorkHours += t;
         if (log.hourBlock === data.hourBlock) timeInBlock += t;
-        if (log.task?.effortType === "DEEP_WORK")    deepWorkHours += t;
+        if (log.task?.effortType === "DEEP_WORK") deepWorkHours += t;
         if (log.task?.effortType === "SHALLOW_WORK") shallowWorkHours += t;
       });
 
@@ -122,12 +122,12 @@ export async function logDailyBlock(data: {
 
       const log = await prisma.dailyLog.create({
         data: {
-          userId:    data.userId,
-          date:      data.date,
+          userId: data.userId,
+          date: data.date,
           hourBlock: data.hourBlock,
           blockType: "DISTRACTION",
           timeSpent: data.timeSpent,
-          notes:     data.notes ?? "",
+          notes: data.notes ?? "",
         },
       });
       return { success: true, log };
@@ -156,5 +156,70 @@ export async function deleteDailyLog(logId: string) {
     return { success: true };
   } catch (error) {
     return { success: false, error: "Failed to delete log." };
+  }
+}
+
+// 5. UPDATE LOG — edit timeSpent, valueAchieved, and/or notes on an existing log
+export async function updateDailyLog(logId: string, patch: {
+  timeSpent?: number;
+  valueAchieved?: number;
+  notes?: string;
+}) {
+  try {
+    const log = await prisma.dailyLog.findUnique({ where: { id: logId } });
+    if (!log) return { success: false, error: "Log not found." };
+
+    if (log.blockType === "TASK_EXECUTION") {
+      if (patch.timeSpent !== undefined && patch.timeSpent <= 0)
+        return { success: false, error: "timeSpent must be > 0." };
+
+      // Re-validate capacity — exclude THIS log's own current time from siblings
+      const siblings = await prisma.dailyLog.findMany({
+        where: { userId: log.userId, date: log.date, hourBlock: log.hourBlock, blockType: { in: ["TASK_EXECUTION", "DISTRACTION"] }, NOT: { id: logId } },
+      });
+      const siblingsTime = siblings.reduce((s, l) => s + (l.timeSpent ?? 0), 0);
+      const newTime = patch.timeSpent ?? log.timeSpent ?? 0;
+      if (siblingsTime + newTime > 1.0 + 1e-9)
+        return { success: false, error: "Cannot exceed 1 hour per block." };
+
+      // Compute quantity delta and apply atomically
+      const oldVal = log.valueAchieved ?? 0;
+      const newVal = patch.valueAchieved ?? oldVal;
+      const delta  = newVal - oldVal;
+
+      await prisma.$transaction([
+        prisma.dailyLog.update({
+          where: { id: logId },
+          data: { timeSpent: newTime, valueAchieved: newVal, notes: patch.notes ?? log.notes },
+        }),
+        ...(delta !== 0 && log.taskId
+          ? [prisma.goalNode.update({ where: { id: log.taskId }, data: { currentQuantity: { increment: delta } } })]
+          : []),
+      ]);
+      return { success: true };
+    }
+
+    if (log.blockType === "DISTRACTION") {
+      if (patch.timeSpent !== undefined && patch.timeSpent <= 0)
+        return { success: false, error: "timeSpent must be > 0." };
+
+      const siblings = await prisma.dailyLog.findMany({
+        where: { userId: log.userId, date: log.date, hourBlock: log.hourBlock, blockType: { in: ["TASK_EXECUTION", "DISTRACTION"] }, NOT: { id: logId } },
+      });
+      const siblingsTime = siblings.reduce((s, l) => s + (l.timeSpent ?? 0), 0);
+      const newTime = patch.timeSpent ?? log.timeSpent ?? 0;
+      if (siblingsTime + newTime > 1.0 + 1e-9)
+        return { success: false, error: "Cannot exceed 1 hour per block." };
+
+      await prisma.dailyLog.update({
+        where: { id: logId },
+        data: { timeSpent: newTime, notes: patch.notes ?? log.notes },
+      });
+      return { success: true };
+    }
+
+    return { success: false, error: "Cannot edit this log type." };
+  } catch (error) {
+    return { success: false, error: "Failed to update log." };
   }
 }

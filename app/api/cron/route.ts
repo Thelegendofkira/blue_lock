@@ -13,23 +13,47 @@ export async function GET(request: Request) {
     if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) return new NextResponse("Unauthorized", { status: 401 });
 
     // 1. Calculate Logical Yesterday (The day we are analyzing)
+    const IST_OFFSET = 5.5 * 60 * 60 * 1000;
     const now = new Date();
-    const offsetTime = new Date(now.getTime() - 3 * 60 * 60 * 1000);
-    const logicalYesterday = new Date(offsetTime);
-    logicalYesterday.setDate(logicalYesterday.getDate() - 1);
-    const targetDate = logicalYesterday.toISOString().split("T")[0];
 
-    const REAL_USER_ID = process.env.YOUR_ADMIN_USER_ID; // Replace with your actual DB User ID for the cron job
+    // Shift current UTC time forward by 5.5 hours so JS Date methods read it as IST
+    const istNow = new Date(now.getTime() + IST_OFFSET);
 
+    // IMPORTANT: Set to 0 to test TODAY'S logs right now. 
+    // Change to 1 when you want the Cron to run automatically for YESTERDAY'S logs.
+    const DAYS_TO_LOOK_BACK = 1;
+
+    // Lock onto EXACTLY 18:30 UTC of the previous logical day (Which is 00:00 IST of our target day)
+    const startOfDay = new Date(Date.UTC(
+      istNow.getUTCFullYear(),
+      istNow.getUTCMonth(),
+      istNow.getUTCDate() - DAYS_TO_LOOK_BACK - 1,
+      18, 30, 0, 0
+    ));
+
+    // End of day is exactly 24 hours later
+    const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+
+    // Format the pretty string for Ego's Prompt (YYYY-MM-DD)
+    const targetDate = new Date(startOfDay.getTime() + IST_OFFSET).toISOString().split("T")[0];
+
+    console.log(`Searching DB from: ${startOfDay.toISOString()} to ${endOfDay.toISOString()}`);
+
+    const REAL_USER_ID = process.env.YOUR_ADMIN_USER_ID;
     // 2. Fetch the entire Goal Hierarchy for context
     const allNodes = await prisma.goalNode.findMany({ where: { userId: REAL_USER_ID } });
 
     // 3. Fetch yesterday's execution data
     const logs = await prisma.dailyLog.findMany({
-      where: { userId: REAL_USER_ID, date: logicalYesterday },
+      where: {
+        userId: REAL_USER_ID,
+        date: {
+          gte: startOfDay,
+          lt: endOfDay
+        }
+      },
       include: { task: true },
     });
-
     // 4. Format Hierarchy Data
     const hierarchySummary = allNodes.filter(n => !n.isTask).map(goal => {
       const children = allNodes.filter(n => n.parentId === goal.id && n.isTask);
@@ -50,9 +74,10 @@ export async function GET(request: Request) {
 
     for (let i = 0; i < 24; i++) {
       const logsForHour = logs.filter(l => l.hourBlock === i);
-      if (logsForHour.length === 0) continue; // Empty blocks are implied negligence
+      if (logsForHour.length === 0) continue;
 
       logsForHour.forEach(log => {
+        // FIX 2: Let the AI see EVERYTHING you logged, not just tasks
         if (log.blockType === "TASK_EXECUTION") {
           actionCount++;
           logSummary += `[${i}:00] EXECUTED: ${log.task?.title} | Time: ${log.timeSpent}h | Notes: "${log.notes || "None"}"\n`;
@@ -63,26 +88,26 @@ export async function GET(request: Request) {
         }
       });
     }
-
     // 6. The Egoist Prompt
     const prompt = `
-      You are an uncompromising, aggressive accountability analyst (inspired by Blue Lock). 
+      You are an uncompromising accountability analyst you see the numbers and decide success or failure as numbers matter most.
       Review the user's execution data from yesterday (${targetDate}).
 
       OVERALL GOAL PROGRESS:
       ${hierarchySummary}
 
       YESTERDAY'S ACTIONS & DISTRACTIONS:
-      ${actionCount === 0 ? "USER LOGGED ZERO ACTIONS. COMPLETE NEGLIGENCE." : logSummary}
-
-      Analyze their performance based ONLY on the data above. Your tone must be serious, analytical, and unforgiving. 
+      ${logSummary === "" ? "USER LOGGED ZERO BLOCKS. COMPLETE NEGLIGENCE. Not knowing where you are wrong is worse than making a mistake." : logSummary}
+      Analyze their performance based ONLY on the data above. Your tone must be serious, analytical and should tell about consequneces if 
+      the person continues they will fail and you need to tell them the consequences they will face in future if they dont work on themselves . 
       You MUST return your response as a strict JSON object with this exact structure:
       {
-        "progress": "Summarize the aggregated progress of their main goals based on the data.",
+        "progress": "Summarize the aggregated progress of their main goals based on the data and it should be in it format goal and progress .",
         "actionsDoneProperly": "Acknowledge what they actually executed correctly.",
         "distractions": "Identify where focus leaked based strictly on DISTRACTION blocks and notes.",
-        "rootDiagnosis": "Psychological breakdown: Identify the character flaw causing the distractions/negligence, how to fix it, and the serious consequences of failing.",
-        "negligenceWarning": "If there are few/no actions logged, ruthlessly explain how this negligence directly causes goal failure. If they worked hard, say 'No severe negligence detected.'"
+        "rootDiagnosis": "Psychological breakdown: Identify the character flaw causing the distractions/negligence, how to fix it, and the serious consequences of failing like is it  a deep routed habit or what analyse it ",
+        "negligenceWarning": "If there are few/no actions logged,  explain how this negligence directly causes goal failure. If they worked hard, say 'No severe negligence detected.'",
+        "time_metrics":"no of hours distracted the amount of productive hours ,amount of deep work ,amount of hours with no actions seperagte all hours even distracted and unaccounted hours"
       }
     `;
 
@@ -97,7 +122,8 @@ export async function GET(request: Request) {
 
     // 8. Format the final WhatsApp Message
     const whatsappMessage = `
-*🔥 BLUE LOCK INTELLIGENCE | ${targetDate}*
+
+* ${targetDate}*
 
 *📊 AGGREGATED PROGRESS*
 ${parsedReport.progress}
@@ -113,6 +139,9 @@ ${parsedReport.rootDiagnosis}
 
 *☠️ NEGLIGENCE WARNING*
 ${parsedReport.negligenceWarning}
+
+*⏳ TIME METRICS* 
+${parsedReport.time_metrics}
     `;
 
     await twilioClient.messages.create({
