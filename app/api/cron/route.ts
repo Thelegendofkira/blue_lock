@@ -6,6 +6,20 @@ import { GoogleGenAI } from "@google/genai";
 
 const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 const ai = new GoogleGenAI({});
+// Calculate Logical Yesterday cleanly at midnight UTC
+const now = new Date();
+const offsetTime = new Date(now.getTime() - 3 * 3600000);
+
+// Subtract 1 day for yesterday
+offsetTime.setDate(offsetTime.getDate() - 1);
+
+const yyyy = offsetTime.getFullYear();
+const mm = String(offsetTime.getMonth() + 1).padStart(2, "0");
+const dd = String(offsetTime.getDate()).padStart(2, "0");
+
+// Force it to a pure Date object at midnight to satisfy Prisma
+const logicalYesterday = new Date(`${yyyy}-${mm}-${dd}T00:00:00.000Z`);
+const targetDate = `${yyyy}-${mm}-${dd}`;
 
 export async function GET(request: Request) {
   try {
@@ -40,6 +54,9 @@ export async function GET(request: Request) {
     console.log(`Searching DB from: ${startOfDay.toISOString()} to ${endOfDay.toISOString()}`);
 
     const REAL_USER_ID = process.env.YOUR_ADMIN_USER_ID;
+    if (!REAL_USER_ID) {
+      throw new Error("Missing YOUR_ADMIN_USER_ID in .env file");
+    }
     // 2. Fetch the entire Goal Hierarchy for context
     const allNodes = await prisma.goalNode.findMany({ where: { userId: REAL_USER_ID } });
 
@@ -113,12 +130,39 @@ export async function GET(request: Request) {
 
     // 7. Call Gemini API
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview", // Keep the model version you verified
+      model: "gemini-3-flash-preview",
       contents: prompt,
       config: { responseMimeType: "application/json" }
     });
 
     const parsedReport = JSON.parse(response.text!);
+
+
+    // NEW: 7.5 Save the report to the Database
+    await prisma.dailyReport.upsert({
+      where: {
+        userId_date: {
+          userId: REAL_USER_ID,
+          date: logicalYesterday,
+        }
+      },
+      update: {
+        progress: parsedReport.progress,
+        actionsDoneProperly: parsedReport.actionsDoneProperly,
+        distractions: parsedReport.distractions,
+        rootDiagnosis: parsedReport.rootDiagnosis,
+        negligenceWarning: parsedReport.negligenceWarning,
+      },
+      create: {
+        userId: REAL_USER_ID,
+        date: logicalYesterday,
+        progress: parsedReport.progress,
+        actionsDoneProperly: parsedReport.actionsDoneProperly,
+        distractions: parsedReport.distractions,
+        rootDiagnosis: parsedReport.rootDiagnosis,
+        negligenceWarning: parsedReport.negligenceWarning,
+      }
+    });
 
     // 8. Format the final WhatsApp Message
     const whatsappMessage = `

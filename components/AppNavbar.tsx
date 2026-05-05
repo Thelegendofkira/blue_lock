@@ -10,6 +10,7 @@ const NAV_LINKS = [
   { href: "/goals",   label: "Goals",   icon: "🎯" },
   { href: "/weekly",  label: "Weekly",  icon: "📊" },
   { href: "/monthly", label: "Monthly", icon: "🗓️" },
+  { href: "/history", label: "History", icon: "🔥" },
 ];
 
 // Pages that render their own header or no header at all

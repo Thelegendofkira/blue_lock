@@ -6,7 +6,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  
 }
 
 // ----------------------------------------------------
@@ -46,6 +45,7 @@ model User {
 
   nodes     GoalNode[]
   dailyLogs DailyLog[]
+  reports   DailyReport[] // <-- Added relationship
 }
 
 model GoalNode {
@@ -79,21 +79,38 @@ model GoalNode {
 }
 
 model DailyLog {
-  id              String     @id @default(cuid())
-  userId          String
+  id            String     @id @default(cuid())
+  userId        String
   
-  date            DateTime   
-  hourBlock       Int        
-  blockType       BlockType  
+  date          DateTime   
+  hourBlock     Int        
+  blockType     BlockType  
   
-  // Notice focusState is completely gone
-  taskId          String?    
-  valueAchieved   Float?     
-  timeSpent       Float?     
-  notes           String?    @db.Text 
+  taskId        String?    
+  valueAchieved Float?     
+  timeSpent     Float?     
+  notes         String?    @db.Text 
 
-  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  task            GoalNode?  @relation(fields: [taskId], references: [id])
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task          GoalNode?  @relation(fields: [taskId], references: [id])
 
+  @@index([userId, date])
+}
+
+// NEW MODEL: AI Daily Reports
+model DailyReport {
+  id                  String   @id @default(cuid())
+  userId              String
+  date                DateTime // The logical date this report represents
+  progress            String   @db.Text
+  actionsDoneProperly String   @db.Text
+  distractions        String   @db.Text
+  rootDiagnosis       String   @db.Text
+  negligenceWarning   String   @db.Text
+  createdAt           DateTime @default(now())
+
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date]) // Ensures only one report per day per user
   @@index([userId, date])
 }
